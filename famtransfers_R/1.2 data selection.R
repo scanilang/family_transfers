@@ -1,7 +1,13 @@
 library(dplyr)
 
-# clean psid data
-psid_clean = read.csv("PSID data/psid_clean.csv")
+###################################################
+# Read in clean data 
+###################################################
+psid_clean = read.csv("../data/psid_clean.csv")
+
+###################################################
+# Aggregate to 2 years
+###################################################
 
 nonaggregate_data <- psid_clean %>% 
   left_join(cpi_data %>% select(year, ratio_2010), by = c("Year" = "year")) %>% 
