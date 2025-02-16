@@ -32,7 +32,7 @@ psid_clean = psid_fam %>%
          Received_ChildSupport_Head = if_else(is.na(Received_ChildSupport_Amount_Spouse),Received_ChildSupport_Reported_Head, Received_ChildSupport_Amount_Spouse),
          Received_ChildSupport_Spouse = if_else(is.na(Received_ChildSupport_Amount_Spouse),Received_ChildSupport_Reported_Spouse, Received_ChildSupport_Amount_Spouse),
          Received_Alimony_Head = if_else(is.na(Received_Alimony_Amount_Head), Received_Alimony_Reported_Head, Received_Alimony_Amount_Head),
-         Received_Support_Amount_Head_Spouse = Received_Family_Head + Received_Family_Spouse,
+         Received_Support_Amount_Head_Spouse = Received_Family_Head + Received_Family_Spouse, # this already does not include alimony and child support
          # Provide Support Variables
          (across(c(Provided_Support_Amount_Head_Spouse, Provided_Alimony_Amount_Head_Spouse, Provided_ChildSupport_Amount_Head_Spouse), 
                  ~case_when(. == 99999 & Survey_Year <= 1992 ~ NA,
