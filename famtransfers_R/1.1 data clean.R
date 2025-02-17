@@ -4,6 +4,7 @@ library(dplyr)
 # Read in raw data 
 ###################################################
 psid_fam<- read.csv("../data/famtransfer_famfile.csv") %>% rename(ER30001 = ID_1968)
+psid_ind<- read.csv("../data/famtransfer_indfile.csv") %>% filter(ER30001 < 3000) %>% select(-Interview_Number)
 cpi_data <- openxlsx::read.xlsx("../data/bls_CPI.xlsx") %>% 
   mutate(ratio_2010 = 218.056 / annual.avg) 
 
@@ -11,9 +12,19 @@ cpi_data <- openxlsx::read.xlsx("../data/bls_CPI.xlsx") %>%
 ###################################################
 # Clean data
 ###################################################
-psid_clean = psid_fam %>% 
-  filter(Survey_Year >= 1985) %>% 
+psid_clean = psid_ind %>% 
+  # limit to household head
+  filter(Relationship_Head %in% c(1,10) & Sequence_Number == 1) %>% 
+  left_join(psid_fam, multiple = 'all') %>% # merge individual and family file to get individual id
   mutate(Year = Survey_Year - 1) %>% 
+  # Attempt to figure out Youngest Child in or out of FU
+  group_by(ER30001, ER30002) %>% 
+  mutate(Most_Recent_Child_Born = if_else(Child_Born_Head_Spouse %in% 1:3| Child_Born_Head_Only %in% 1:3 | Child_Born_Spouse_Only %in% 1:3, Year, NA_integer_),
+         Most_Recent_Child_Born = if_else(Child_Born_Head_Spouse_2Years %in% 1:3| Child_Born_Head_Only_2Years %in% 1:3 | Child_Born_Spouse_Only_2Years %in% 1:3, Year-1, Most_Recent_Child_Born)) %>% 
+  tidyr::fill(Most_Recent_Child_Born, .direction = "down" ) %>% 
+  mutate(Age_Youngest = Year - Most_Recent_Child_Born, 
+         Have_Dependents = if_else(Age_Youngest <= 21 | Number_Dependents_Head_Spouse > 0, 1, 0)) %>% 
+  ungroup() %>% 
   mutate(# Demographic Variables
          Age_Head = case_when(Age_Head >=99 ~ NA,
                               Age_Head == 98 & Survey_Year %in% c(1995,1996) ~ NA, 
@@ -33,6 +44,13 @@ psid_clean = psid_fam %>%
          Received_ChildSupport_Spouse = if_else(is.na(Received_ChildSupport_Amount_Spouse),Received_ChildSupport_Reported_Spouse, Received_ChildSupport_Amount_Spouse),
          Received_Alimony_Head = if_else(is.na(Received_Alimony_Amount_Head), Received_Alimony_Reported_Head, Received_Alimony_Amount_Head),
          Received_Support_Amount_Head_Spouse = Received_Family_Head + Received_Family_Spouse, # this already does not include alimony and child support
+         # 1988 Survey Synchronize 
+         Supported1 = if_else(Survey_Year == 1988 & Provided_Support_ExPartner_88 > 0, "Ex/Current Partner", as.character(Supported1)),
+         Supported2 = if_else(Survey_Year == 1988 & Provided_Support_Children_88 > 0, "Child", as.character(Supported2)),
+         Supported3 = if_else(Survey_Year == 1988 & Provided_Support_Parents_88 > 0, "Parent", as.character(Supported3)),
+         Supported4 = if_else(Survey_Year == 1988 & Provided_Support_Siblings_88 > 0, "Sibling", as.character(Supported4)),
+         Supported5 = if_else(Survey_Year == 1988 & Provided_Support_OtherRelative_88 > 0, "Other relative", as.character(Supported5)),
+         Provided_Family_Support_Total_88 = if_else(Survey_Year == 1988, Provided_Support_Total_88 - Provided_Support_NonRelative_88 - Provided_Support_Unknown_88, Provided_Support_Total_88), 
          # Provide Support Variables
          (across(c(Provided_Support_Amount_Head_Spouse, Provided_Alimony_Amount_Head_Spouse, Provided_ChildSupport_Amount_Head_Spouse), 
                  ~case_when(. == 99999 & Survey_Year <= 1992 ~ NA,
@@ -64,15 +82,18 @@ psid_clean = psid_fam %>%
          Provided_Support_ExPartner = if_else(if_any(starts_with("Supported"), ~ . %in% c("Ex or deceased spouse","Ex/Current Partner")), 1, 0),
          Provided_Support_Unknown = if_else((if_any(starts_with("Supported"), ~ . %in% c("99","998","999")) | if_all(starts_with("Supported"), ~ . == "0")) , 1, 0), 
          Provided_Support_Relative = if_else(if_any(starts_with("Supported"), ~ Provided_Support_Nonrelative != 1 & Provided_Support_Unknown != 1), 1, 0),
-         Provided_ChildSupport_Amount_Head_Spouse_clean = if_else(Provided_Support_Child == 0 &  Provided_Support_ExPartner == 0 , 0,Provided_ChildSupport_Amount_Head_Spouse),
-         Provided_Support_NetACS = Provided_Support_Amount_Head_Spouse - Provided_Alimony_Amount_Head_Spouse - Provided_ChildSupport_Amount_Head_Spouse_clean,
-         Provided_Support_NetACS_clean = case_when(Provided_Support_NetACS ==0 ~ 0,
-                                                  (Provided_Support_Nonrelative == 1|Provided_Support_Unknown == 1) & Provided_Support_Relative == 1~ NA, 
-                                                  Provided_Support_Nonrelative ==1 & Provided_Support_Relative == 0 ~ 0,
-                                                  Provided_Support_NetACS > 0 & if_all(starts_with("Supported"), ~ . == "0") ~ NA,
-                                            # Supported1 == "Ex/Current Partner" 
-                                             TRUE ~ Provided_Support_NetACS), 
-         Family_Transfers_Net = Provided_Support_NetACS - Received_Support_Amount_Head_Spouse,
+         Provided_ChildSupport_Amount_Head_Spouse = if_else(Provided_Support_Child == 0 &  Provided_Support_ExPartner == 0 , 0,Provided_ChildSupport_Amount_Head_Spouse),
+         Provided_Family_Support_Total = case_when(Survey_Year == 1988 ~ Provided_Family_Support_Total_88,
+                                                   # Unidentified recipient 
+                                                   Survey_Year != 1988 & (Provided_Support_Nonrelative == 1|Provided_Support_Unknown == 1) & Provided_Support_Relative == 1~ NA,
+                                                   if_all(starts_with("Supported"), ~ . == "0") ~ NA,
+                                                   # Nonrelatives only
+                                                   Survey_Year != 1988 & Provided_Support_Nonrelative ==1 & Provided_Support_Relative == 0 ~ 0,
+                                                   TRUE ~ Provided_Support_Amount_Head_Spouse), 
+         Provided_Family_Support_NetACS = case_when(Provided_Family_Support_Total == 0 ~ 0,
+                                                  Provided_Family_Support_Total- Provided_ChildSupport_Amount_Head_Spouse - Provided_Alimony_Amount_Head_Spouse < 0 ~ 0,
+                                                  TRUE ~ Provided_Family_Support_Total- Provided_ChildSupport_Amount_Head_Spouse - Provided_Alimony_Amount_Head_Spouse), 
+         Family_Transfers_Net = Provided_Family_Support_NetACS - Received_Support_Amount_Head_Spouse,
          # Income Variables
          across(c(Unemployment_Comp_Head_Reported,Unemployment_Comp_Spouse_Reported,
                   Workers_Comp_Head_Reported, Workers_Comp_Spouse_Reported), ~case_when(. == 99999 & Survey_Year %in% 1993:2001 ~ NA,
@@ -86,48 +107,68 @@ psid_clean = psid_fam %>%
   # CPI adjustment
   left_join(cpi_data %>% select(year, ratio_2010), by = c("Year" = "year")) %>% 
   mutate(Total_Family_Income = Total_Family_Income *ratio_2010, 
-         Receive_Head_Spouse_Net = Receive_Head_Spouse_Net * ratio_2010,
-         Support_Amount_Net = Support_Amount_Net * ratio_2010,
+         Received_Support_Amount_Head_Spouse = Received_Support_Amount_Head_Spouse * ratio_2010,
+         Provided_Family_Support_NetACS = Provided_Family_Support_NetACS * ratio_2010,
+         Family_Transfers_Net = Family_Transfers_Net * ratio_2010,
          Unemployment_Comp_Head  = Unemployment_Comp_Head * ratio_2010,
-         Workers_Comp_Head  = Workers_Comp_Head * ratio_2010) %>% 
-  # selection criteria
-  filter(Race_Head %in% c(1,2),
-         Race_Head_2nd == 0,# white or black only
-         Age_Head >= 17) %>%  # white or black only
-  select(Family_ID, ER30001,Year, Survey_Year,Age_Head, Race_Head, Head_College_Degree, Marital_Status, Family_Unit_Size, Num_Children_FU, everything())
+         Workers_Comp_Head  = Workers_Comp_Head * ratio_2010,
+         Unemployment_Comp_Spouse = Unemployment_Comp_Spouse * ratio_2010,
+         Workers_Comp_Spouse  = Workers_Comp_Spouse * ratio_2010) 
 
-psid_select = psid_clean %>% 
-  select(Family_ID, ER30001,Year, Survey_Year,Age_Head, Race_Head, Marital_Status, Num_Children_FU,Provided_Support_Amount_Head_Spouse, Provided_Alimony_Amount_Head_Spouse,
-         Provided_ChildSupport_Amount_Head_Spouse,Provided_ChildSupport_Amount_Head_Spouse_clean,Provided_Support_NetACS,Provided_Support_NetACS_clean, Provided_Support_Child, Provided_Support_ExPartner,Supported1, Supported2, Supported3, Supported4, Supported5, Number_Supported) %>% 
-  filter(Provided_ChildSupport_Amount_Head_Spouse >0 |Provided_Alimony_Amount_Head_Spouse >0 ) #%>% 
- # filter(Provided_Alimony_Amount_Head_Spouse > 0 & Number_Supported > 1)
-         
-psid_select = psid_clean %>% 
-  select(Family_ID, ER30001,Year, Survey_Year,Age_Head, Race_Head, Marital_Status, Num_Children_FU,Provided_Support_Amount_Head_Spouse, ,Provided_Alimony_Amount_Head_Spouse,
-         Provided_ChildSupport_Amount_Head_Spouse,Provided_ChildSupport_Amount_Head_Spouse_clean,Provided_Support_NetACS, Provided_Support_NetACS_clean, Supported1, Supported2, Supported3, Supported4, Supported5, Number_Supported) %>% 
-  mutate(Support_Not_Child = if_else(if_all(starts_with("Supported"), ~. != "Child"), 1, 0)) %>% 
-  filter(Provided_Support_Amount_Head_Spouse >0 ) %>% 
-  filter(Support_Not_Child == 1)
+write.csv(psid_clean, "../data/psid_clean.csv")
 
-test = psid_fam %>% 
-  select(Family_ID, ER30001, Survey_Year,Age_Head, Race_Head, Marital_Status, Num_Children_FU,Provided_Support_Amount_Head_Spouse, Provided_Alimony_Amount_Head_Spouse,
-         Provided_ChildSupport_Amount_Head_Spouse, Whether_Provided_Support_Head_Spouse, Whether_Alimony, Whether_ChildSupport, Supported1, Supported2, Supported3, Supported4, Supported5, Number_Supported) %>% 
-  filter(Supported1 == 0) %>% 
-  filter(Provided_Support_Amount_Head_Spouse > 0 & Provided_Support_Amount_Head_Spouse < 100000)
-  
-psid_select = psid_clean %>% 
-  select(Family_ID, ER30001,Year, Survey_Year,Age_Head, Race_Head, Marital_Status, Num_Children_FU,Received_Family_Head, Received_ChildSupport_Head, Received_Alimony_Head)
+# selection criteria and cleaned variables
+psid_select = psid_clean %>%   
+  filter(Survey_Year >= 1985,
+         Age_Head >= 17,
+         Race_Head %in% c(1,2),
+         Race_Head_2nd == 0) %>%  
+  select(Family_ID, ER30001, ER30002, Survey_Year, Year, Age_Head, Age, Race_Head, Marital_Status, Family_Unit_Size, Num_Children_FU,
+         Provided_Family_Support_NetACS, Received_Support_Amount_Head_Spouse,Unemployment_Comp_Head, Unemployment_Comp_Spouse,
+         Workers_Comp_Head, Workers_Comp_Spouse)
 
-write.csv(psid_clean, "PSID data/psid_clean.csv")
+write.csv(psid_select, "../data/psid_select.csv")
 
 ###################################################
 # Aggregate to 2 years
 ###################################################
 
+psid_model_data <- psid_select %>% 
+  # double biennial year
+  full_join(psid_select %>%
+            filter(Survey_Year >= 1999) %>% 
+            mutate(Year = Year -1,Age = Age -1)) %>% 
+  # age categories
+  mutate(age_cat = (Age - 21) %/% 2 + 1) %>% 
+       #  age_cat = if_else(Age %in% 17-20, "18-20", age_cat)) %>% 
+  # aggregated variables
+  group_by(ER30001, ER30002, age_cat) %>% 
+  mutate(n = n(),
+         sum_transfer_out = sum(Provided_Family_Support_NetACS),
+         sum_transfer_in = sum(Received_Support_Amount_Head_Spouse),
+         sum_unemp_insurance = sum(Unemployment_Comp_Head + Unemployment_Comp_Spouse),
+         sum_workers_comp = sum(Workers_Comp_Head + Workers_Comp_Spouse),
+         years_married = sum(Marital_Status == "Married"),
+         avg_FU_size= mean(Family_Unit_Size),
+         Year_first = min(Year)) %>% 
+  ungroup() %>% 
+  # received/provided in past
+  group_by(ER30001, ER30002) %>% 
+  mutate(received_transfer_past = cumsum(sum_transfer_in > 0) > 0 & row_number() > 1,
+         provided_transfer_past = cumsum(sum_transfer_out > 0) > 0 & row_number() > 1) %>% 
+  ungroup()
+  
+# write output
+write.csv(psid_model_data, "../data/psid_model_data.csv")
 
 ###################################################
-# Testing topcoding
+# Testing 
 ###################################################
+
+# Age 
+# ages =psid_clean %>% 
+#   group_by(Race_Head, Age_Head) %>% 
+#   summarize(n = n())
 
 # Receive_Family_Reported_Head:
 #topcoded to 999997 from 2003 to 2021
