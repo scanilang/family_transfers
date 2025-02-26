@@ -1,0 +1,7 @@
+"0","```r
+# c. Macroeconomic history vs. cross-sectional variance
+fig1c <- ggplot(fig1a_data, aes(x = Age, y = val)) +
+  geom_line(color=\"#69b3a2\", size=1, alpha=0.9) +
+  labs(x = \"Age-Normalized Cross-Sectional Variance of Persistent Shock \", y = \"Fraction of Contractions During Working Life\", title = \"Fig 1c\") +
+  scale_x_continuous(breaks = seq(0.2,1, 0.1))
+```"

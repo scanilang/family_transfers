@@ -1,0 +1,142 @@
+using Interpolations, Optim, Plots, DataFrames, NLsolve, Roots
+import QuantEcon: rouwenhorst
+
+function polyexpandgrid(n, a, b, theta)
+
+    grid1 = collect(LinRange(0,1,n))
+    grid2 = repeat([0.0],n) 
+    for i in 1:n
+    grid2[i] = a + (b-a)*grid1[i]^theta
+    end
+    return grid2
+end
+
+function Markov(zpnts, r)
+    if r == 1
+        MC =  rouwenhorst(zpnts, 0.9073, 0.3460711, 0)  
+    elseif r == 2
+        MC =  rouwenhorst(zpnts, 0.8617, 0.5266093, 0) 
+    end
+
+    return MC.p, MC.state_values
+end
+
+# Numerical derivative
+function v1_deriv(v2, z_grid, a_grid, h = 1e-9)
+    v_itp = LinearInterpolation((r_grid, j1_grid, z_grid, e_grid, a_grid,t_grid, t_grid, t_grid, t_grid), v1, extrapolation_bc=Line())
+    Va = (v_itp(r_grid, j1_grid, z_grid, e_grid, a_grid .+ h,0:1, 0:1, 0:1, 0:1) .- v_itp(r_grid, j1_grid, z_grid, e_grid, a_grid .- h, 0:1,0:1, 0:1, 0:1)) ./ (2*h)
+    return Va
+end
+VF2 = zeros(2, length(j2_grid),zpnts, 3,apnts, 2, 2, 2, 2, 2, 6)
+function v2_deriv(v2, z_grid, a_grid, h = 1e-9)
+    v_itp = LinearInterpolation((r_grid, j2_grid, z_grid, e_grid, a_grid,t_grid, t_grid, t_grid, t_grid, m_grid, n_grid), v2, extrapolation_bc=Line())
+    Va = (v_itp(r_grid, j2_grid, z_grid, e_grid, a_grid .+ h,t_grid, t_grid, t_grid, t_grid, m_grid, n_grid) .- v_itp(r_grid, j2_grid, z_grid, e_grid, a_grid .- h, t_grid, t_grid, t_grid, t_grid, m_grid, n_grid)) ./ (2*h)
+    return Va
+end
+
+function v3_deriv(v3, z_grid, a_grid, h = 1e-9)
+    v_itp = LinearInterpolation((r_grid, j3_grid, z_grid, e_grid, a_grid,t_grid, t_grid, t_grid, t_grid, m_grid), v3, extrapolation_bc=Line())
+    Va = (v_itp(r_grid, j3_grid, z_grid, e_grid, a_grid .+ h,0:1, 0:1, 0:1, 0:1, 0:1) .- v_itp(r_grid, j3_grid, z_grid, e_grid, a_grid .- h, 0:1,0:1, 0:1, 0:1, 0:1)) ./ (2*h)
+    return Va
+end
+
+function w_deriv(w, z_grid, a_grid, h = 1e-9)
+    w_itp = LinearInterpolation((r_grid, j_grid, z_grid, e_grid, a_grid,t_grid, t_grid, t_grid, t_grid, m_grid), w, extrapolation_bc=Line())
+    Wa = (w_itp(r_grid, jw_grid, z_grid, e_grid, a_grid .+ h,0:1, 0:1, 0:1, 0:1, 0:1) .- v_itp(r_grid, jw_grid, z_grid, e_grid, a_grid .- h, 0:1,0:1, 0:1, 0:1, 0:1)) ./ (2*h)
+    return Wa
+end
+
+
+# EGM
+zpnts = 10
+apnts = 20
+t_grid = collect(0:1)
+inc_input = 1
+j1_grid = collect(1:4)
+j2_grid = collect(5:13)
+j3_grid = collect(14:22)
+jw_grid = collect(23:33)
+e_grid = collect([ 0, 2, 4])
+gamma = 1.5
+m_grid = collect(0:1)
+n_grid = collect(1:5)
+r_grid = collect(1:2) 
+
+
+s_grid_1 = [oecd(m, n) for m in m_grid, n in n_grid]
+s_exp_2 = reshape(s_grid_1,1,1,1,1,1,1,1, 2, 5) 
+s_exp_2 = repeat(s_exp_2, outer=(2, length(j1_grid), zpnts, 3, apnts, 2, 2, 2, 1, 1))
+
+s_grid_2 = [oecd(m, m+1) for m in m_grid]
+s_exp = reshape(s_grid_2, 1, 1, 1, 1, 1, 1, 1, 1, 2)
+s_exp_3 = repeat(s_exp, outer=(2, length(j3_grid), zpnts, 3, apnts, 2, 2, 2, 1))
+s_exp_1 = repeat(s_exp, outer=(2, length(j1_grid), zpnts, 3, apnts, 2, 2, 2, 1))
+s_exp_w = repeat(s_exp, outer=(2, length(jw_grid), zpnts, 3, apnts, 2, 2, 2, 1))
+
+
+function egm(apnts,zpnts, inc_input,tol = 1e-9, max_iter = 10000)
+
+    # Step 0: grid for tomorrow's capital and today's shock
+    a_grid = [25; polyexpandgrid(apnts-1, exp(7), exp(20), 1.3)] 
+    Pimat, z_grid = Markov(zpnts, inc_input)
+    z_grid = exp.(z_grid)
+    # initial guess
+    VF1 = zeros(2, length(j1_grid),zpnts, 3,apnts, 2, 2, 2, 2) # j, z, e, a, shock_in, shock_out, past_in, past_out
+    VF2 = zeros(2, length(j2_grid),zpnts, 3,apnts, 2, 2, 2, 2, 2, 5) # j, z, e, a, shock_in, shock_out, past_in, past_out, m, n
+    VF3 = zeros(2, length(j3_grid),zpnts, 3,apnts, 2, 2, 2, 2, 2) # j, z, e, a, shock_in, shock_out, past_in, past_out, m
+    WF = ones(2, length(jw_grid),zpnts, 3, apnts, 2, 2, 2, 2, 2) # j, z, a, e, shock_in, shock_out, past_in, past_out, m
+
+    WF, WPF= T_w(WF)
+    VF3, PF3= T_v3(VF3,WF)
+    VF2, PF2= T_v2(VF2, VF3)
+    VF1, PF1= T_v1(VF1, VF2)
+
+    iters = 0
+
+    while (iters < max_iters)
+        iters += 1
+
+        # Step 1: consumption decision
+        c1 = u_prime_inv.(v1_deriv(VF1, z_grid, a_grid), 1 )
+        c2 = u_prime_inv.(v2_deriv(VF2, z_grid, a_grid), s_exp_2 )
+        c3 = u_prime_inv.(v3_deriv(VF3, z_grid, a_grid), s_exp_3 )
+        cw = u_prime_inv.(vw_deriv(WF, z_grid, a_grid), s_exp_3 )
+
+        # Step 2: 
+        # today's end of period resources as function of tomorrows capital and todays shock
+        Y1 = c1 .+ a_grid
+        Y2 = c2 .+ a_grid
+        Y3 = c2 .+ a_grid
+        # today's updated value function
+        V1 = u.(c1,1) .+ VF1
+        V2 = u.(c2,s_exp_2) .+ VF2
+        V3 = u.(c3,s_exp_3) .+ VF3
+        W = u.(cw,s_exp_3) .+ WF
+        
+        # Step 3: Interpolate VF1 to obtain its value on a grid of tomorrow's end of period resources
+        VF1_prime = similar(VF1)
+        for (i,a) in enumerate(z_grid)
+
+        end
+        
+        # Step 4: Optain new VF2
+        VF2_new = similar(VF2)
+
+
+        if (dist < tol)
+            print("Solution found: $iters iterations and $dist" error)
+
+             # Step 5
+            PF, WPF = a_solve(Ytoday_VF, Ytoday_WF, z_grid, asset_grid, r,m,n)
+            APF, AWPF  = ap1_solve(Ytoday_VF, Ytoday_WF, z_grid, asset_grid, r, m ,n)
+            return VF1today, WF1today,PF, WPF, APF, AWPF  #Ytoday_VF, Ytoday_WF# 
+        end
+
+    end
+
+    if iters == max_iters
+        print("Max Iterations Reached")
+        return VF1today, WF1today, Ytoday_VF, Ytoday_W
+    end
+
+end

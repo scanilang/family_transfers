@@ -1,0 +1,110 @@
+########################################################################
+#
+# Functions
+#
+########################################################################
+num_recessions <- function(Year,working_year_start ){
+  gnp_recession %>%
+    filter(year <= as.numeric(Year), year >= working_year_start ) %>%
+    summarize(count = sum(contraction)) %>% pull(1)
+}
+num_booms <- function(Year,working_year_start ){
+  hotmarket %>%
+    filter(year <= as.numeric(Year), year >= working_year_start ) %>%
+    summarize(count = sum(boom)) %>% pull(1)
+}
+
+recover_u_data <- function(dataset){
+  
+  # estimate g(x,Y)
+  eq6_data = lm(log(Labor_Income_Panels) ~ as.factor(Year) + Age_Panel + Age2_Panel + Age3_Panel +  Education_Panel, data = dataset)
+  
+  eq6_year <-  data.frame(coef= attr(eq6_data$coefficients, "names"), year_coef = eq6_data$coefficients) %>%  
+    tibble::remove_rownames() %>% 
+    mutate(Year = if_else(grepl("Year", coef),str_sub(coef, -4,-1),coef ), 
+           Year = if_else(Year == "(Intercept)", '1968', Year),
+           Year = as.integer(Year)) %>% 
+    select(Year, year_coef)
+  
+  # recover u
+  recover_u <- dataset %>% 
+    mutate(Year = as.character(Year),
+           Year = as.numeric(Year)) %>% 
+    left_join(eq6_year) %>% 
+    mutate(g = if_else(Year != 1968, eq6_data$coefficients[1] + year_coef  +
+                         Age_Panel*eq6_data$coefficients["Age_Panel"] + Age2_Panel*eq6_data$coefficients["Age2_Panel"] + 
+                         Age3_Panel*eq6_data$coefficients["Age3_Panel"] + Education_Panel*eq6_data$coefficients["Education_Panel"],
+                       eq6_data$coefficients[1] +
+                         Age_Panel*eq6_data$coefficients["Age_Panel"] + Age2_Panel*eq6_data$coefficients["Age2_Panel"] + 
+                         Age3_Panel*eq6_data$coefficients["Age3_Panel"] + Education_Panel*eq6_data$coefficients["Education_Panel"]),
+           u = log(Labor_Income_Panels) - g ) %>% 
+    group_by(Age_Panel, Year) %>% 
+    mutate(var_u = var(u, na.rm = T)) %>% 
+    mutate(mean_u = mean(u, na.rm = T)) %>% 
+    ungroup()
+  
+  return(recover_u)
+}
+
+plot_data <-function(dataset, measure){
+  
+  recover_u = recover_u_data(dataset)
+  
+  if(measure == "variance"){
+    eq4_data<- lm(var_u ~ as.factor(Age_Panel) + as.factor(BirthCohort), data = recover_u)
+  }
+  
+  if(measure == "mean"){
+    eq4_data<- lm(mean_u ~ as.factor(Age_Panel) + as.factor(BirthCohort), data = recover_u)
+  }
+  
+  cohort_effect_data <- data.frame(coef= attr(eq4_data$coefficients, "names"), val = eq4_data$coefficients) %>% 
+    tibble::remove_rownames() %>% 
+    filter(grepl("Cohort", coef)) %>% 
+    mutate(BirthCohort = str_sub(coef,-4,-1),
+           BirthCohort = as.numeric(BirthCohort)) 
+  
+  psid_oldest_data <- recover_u %>% 
+    select(Year, Age, Age_Panel, Race, Sex, Marital_Status, BirthCohort) %>% 
+    # mutate(BirthCohort = as.numeric(Year) - as.numeric(Age_Panel)) %>% 
+    arrange(BirthCohort, desc(Age_Panel)) %>% 
+    distinct(BirthCohort, .keep_all = T) %>% 
+    mutate(working_year_start = as.numeric(as.character(BirthCohort)) + 22, # working age starts at 22,
+           num_yrs_working = as.numeric(Year) - working_year_start + 1,
+           yrs_pre1929 = 1929 - working_year_start, 
+           yrs_pre1929 = if_else(yrs_pre1929 < 0 , 0, yrs_pre1929),
+           yrs_after1929 = if_else(working_year_start >= 1929, num_yrs_working, as.numeric(Year) - 1929 + 1))
+  
+  num_yrs_recession <- c()
+  num_exp_booms <- c()
+  for(i in 1:nrow(psid_oldest_data)){
+    num_yrs_recession <- c(num_yrs_recession,num_recessions(psid_oldest_data$Year[i],psid_oldest_data$working_year_start[i] ))
+    num_exp_booms <- c(num_exp_booms,num_booms(psid_oldest_data$Year[i],psid_oldest_data$working_year_start[i] ))
+  }
+  
+  psid_oldest_data$num_yrs_recession = num_yrs_recession
+  psid_oldest_data$num_exp_booms = num_exp_booms
+  
+  data_out <- psid_oldest_data %>% 
+    mutate(BirthCohort = as.factor(BirthCohort)) %>% 
+    mutate(fraction = num_yrs_recession / num_yrs_working,
+           fraction_booms = num_exp_booms / (yrs_after1929* 4 + yrs_pre1929)) %>% 
+    left_join(cohort_effect_data %>% mutate(BirthCohort = as.factor(BirthCohort))) %>% 
+    mutate(BirthCohort = as.factor(BirthCohort)) %>% 
+    filter(!is.infinite(fraction))
+  
+  return(data_out)
+}
+
+
+eq4 <- lm(var_u ~ as.factor(Age_Panel) + BirthCohort_Panel, data = sty_panel)
+
+summary(eq4)
+
+# used for scaling
+# age_40_unconditional <- sty_panel%>% 
+#   group_by(Age_Panel) %>% 
+#   summarize(var_u = var(u, na.rm = T)) %>% 
+#   filter(Age_Panel == 40) %>% pull(2)
+age_40 <- sty_panel %>% filter(Age_Panel == 40)
+age_40_unconditional <- var(age_40$u, na.rm= T)

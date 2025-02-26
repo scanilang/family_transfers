@@ -1,0 +1,80 @@
+"0","```r
+# create STY dataset
+psid_sty_household <- psid_household %>% 
+  select(ER30001, ER30002, Survey_Year, Year, Age, Sex, Family_Unit_Size, Completed_Education,
+         Labor_Income_Household,Total_Transfers_Household) %>% 
+  left_join(cpi_68, by= join_by(Year)) %>% # cpi 1968
+  left_join(gnp_recession %>% select(year, contraction), by = c('Year' = 'year')) %>%  # recession measure
+  select(-X) %>% 
+  # STY selection
+ filter(Year >= 1968 & Year <= 1993) %>% # sample years
+  filter(Age >= 22 & Age <= 60) %>% # household head age
+  filter(ER30001 < 3000) %>%  # restrict to SRC
+  mutate(# STY earnings definition
+         Household_Earnings = Labor_Income_Household + Total_Transfers_Household,
+         Household_Earnings_68 = Household_Earnings * ratio_1968,  # deflate to 1968 dollars
+         #Household_Earnings_Per_Person = Household_Earnings_68 / Family_Unit_Size,
+         # Birth Cohort
+         BirthCohort = as.factor(Year - Age),
+         Age2 = Age^2,
+         Age3 = Age^3)
+
+sty_panel <- psid_sty_household %>%  
+  # growth rate and prep for overlapping panel
+  # mutate(Year2 = if_else(Year <= 1991, Year + 1, NA ),
+  #        Year3 = if_else(Year <= 1991, Year + 2, NA)) %>% 
+    mutate(Year2 = case_when( Year <= 1996 ~ Year + 1, 
+                              Year >= 1997~ Year + 2),
+           Year3 = case_when(Year <= 1995 ~ Year + 2,
+                             Year <= 1996 ~ Year + 3,
+                             Year >= 1997 ~ Year + 4)) %>% 
+  #filter(Year == 1991) %>% 
+  left_join(psid_sty_household %>% 
+              select(ER30001, ER30002, Year, Household_Earnings_68, Completed_Education, Family_Unit_Size) %>% 
+              rename(Household_Earnings_68_Y2 = Household_Earnings_68,
+                     Completed_Education_Y2 = Completed_Education,
+                     Family_Unit_Size_Y2 = Family_Unit_Size),
+            by = c(\"ER30001\" = \"ER30001\", \"ER30002\" = \"ER30002\", 'Year2' = 'Year')) %>% 
+  left_join(psid_sty_household %>% 
+              select(ER30001, ER30002, Year, Household_Earnings_68, Completed_Education, Family_Unit_Size) %>% 
+              rename(Household_Earnings_68_Y3 = Household_Earnings_68,
+                     Completed_Education_Y3 = Completed_Education,
+                     Family_Unit_Size_Y3 = Family_Unit_Size),
+            by = c(\"ER30001\" = \"ER30001\", \"ER30002\" = \"ER30002\", 'Year3' = 'Year')) %>% 
+  # selection criteria 
+  mutate(Household_Earnings_Growth1 = ((Household_Earnings_68_Y2 - Household_Earnings_68)/Household_Earnings_68)*100,
+         Household_Earnings_Growth2 = ((Household_Earnings_68_Y3 - Household_Earnings_68_Y2)/Household_Earnings_68_Y2)*100) %>% 
+  filter( # total earnings are strictly positive
+          Household_Earnings_68 >0 & Household_Earnings_68_Y2 > 0 & Household_Earnings_68_Y3 > 0,
+          # consecutive total earnings growth rates less than 20 and no lower than 1/20
+          Household_Earnings_68_Y2 < Household_Earnings_68 * 20,
+          Household_Earnings_68_Y2 > Household_Earnings_68 * 1/20,
+          Household_Earnings_68_Y3 < Household_Earnings_68_Y2 * 20,
+          Household_Earnings_68_Y3 > Household_Earnings_68_Y2 * 1/20) %>% 
+  # three-year overlapping panels
+  tidyr::pivot_longer(cols = c(\"Household_Earnings_68\", \"Household_Earnings_68_Y2\",\"Household_Earnings_68_Y3\"),
+               names_to = \"Panel_Year\",
+               values_to = \"Household_Earnings_Panels\") %>% 
+  mutate(Age_Panel = case_when(Panel_Year == \"Household_Earnings_68\" ~ Age,
+                               Panel_Year == \"Household_Earnings_68_Y2\" ~ Age + 1,
+                               Panel_Year == \"Household_Earnings_68_Y3\" ~ Age + 2),
+         Education_Panel = case_when(Panel_Year == \"Household_Earnings_68\" ~ Completed_Education,
+                               Panel_Year == \"Household_Earnings_68_Y2\" ~ Completed_Education_Y2,
+                               Panel_Year == \"Household_Earnings_68_Y3\" ~ Completed_Education_Y3),
+         Panel = case_when(Panel_Year == \"Household_Earnings_68\" ~ \"Year 1\",
+                               Panel_Year == \"Household_Earnings_68_Y2\" ~ \"Year 2\",
+                               Panel_Year == \"Household_Earnings_68_Y3\" ~ \"Year 3\"),
+         Family_Size_Panel = case_when(Panel_Year == \"Household_Earnings_68\" ~ Family_Unit_Size,
+                               Panel_Year == \"Household_Earnings_68_Y2\" ~ Family_Unit_Size_Y2,
+                               Panel_Year == \"Household_Earnings_68_Y3\" ~ Family_Unit_Size_Y3),) %>% 
+  select(ER30001, ER30002, Survey_Year, Year, Panel, contraction, Age, Age2, Age3, BirthCohort, Age_Panel, Sex, Family_Unit_Size, 
+         Completed_Education, Education_Panel, Household_Earnings_Panels, Family_Size_Panel) %>% 
+  arrange(ER30001, ER30002, Year, Age_Panel) %>% 
+  mutate(BirthCohort_Panel = as.factor(Year - Age_Panel),
+         Age2_Panel = Age_Panel^2,
+         Age3_Panel = Age_Panel^3,
+         Year = as.factor(Year)) %>% 
+  filter(Age < 59)
+  
+(test2 <- sty_panel %>% group_by(Year) %>% summarize(households = n()/3))
+```"

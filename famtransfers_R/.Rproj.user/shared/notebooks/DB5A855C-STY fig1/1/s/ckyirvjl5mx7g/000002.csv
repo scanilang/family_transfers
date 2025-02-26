@@ -1,0 +1,78 @@
+"0","```r
+# estimate g(x,Y)
+eq6 = lm(log(Household_Earnings_Panels) ~ as.factor(Year) + Age_Panel + Age2_Panel + Age3_Panel + Education_Panel + Family_Size_Panel, data = sty_panel)
+#eq6 = lm(log(Household_Earnings_Panels) ~ as.factor(Year) + Age + Age2 + Age3 + Completed_Education + Family_Unit_Size, data = sty_panel)
+
+eq6_year <- data.frame(coef= attr(eq6$coefficients, \"names\"), year_coef = eq6$coefficients) %>% 
+  tibble::remove_rownames() %>% 
+  mutate(Year = if_else(grepl(\"Year\", coef),str_sub(coef, -4,-1),coef ))
+
+# table 1 parameter estimates
+summary(eq6) 
+```"
+"1","
+Call:
+lm(formula = log(Household_Earnings_Panels) ~ as.factor(Year) + 
+    Age_Panel + Age2_Panel + Age3_Panel + Education_Panel + Family_Size_Panel, 
+    data = sty_panel)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-6.6689 -0.3102  0.0710  0.4024  3.1487 
+
+Coefficients:
+                      Estimate Std. Error t value Pr(>|t|)    
+(Intercept)          5.316e+00  1.035e-01  51.369  < 2e-16 ***
+as.factor(Year)1969  4.722e-03  1.263e-02   0.374  0.70862    
+as.factor(Year)1970  1.910e-02  1.253e-02   1.524  0.12743    
+as.factor(Year)1971  3.628e-02  1.243e-02   2.919  0.00351 ** 
+as.factor(Year)1972  5.286e-02  1.230e-02   4.298 1.73e-05 ***
+as.factor(Year)1973  3.322e-02  1.222e-02   2.717  0.00658 ** 
+as.factor(Year)1974  1.291e-02  1.213e-02   1.064  0.28712    
+as.factor(Year)1975  1.247e-02  1.205e-02   1.035  0.30060    
+as.factor(Year)1976  2.669e-02  1.199e-02   2.227  0.02597 *  
+as.factor(Year)1977  3.671e-02  1.192e-02   3.081  0.00207 ** 
+as.factor(Year)1978  1.374e-02  1.184e-02   1.161  0.24570    
+as.factor(Year)1979 -1.959e-02  1.179e-02  -1.661  0.09679 .  
+as.factor(Year)1980 -6.858e-02  1.179e-02  -5.816 6.04e-09 ***
+as.factor(Year)1981 -9.674e-02  1.178e-02  -8.214  < 2e-16 ***
+as.factor(Year)1982 -1.084e-01  1.175e-02  -9.230  < 2e-16 ***
+as.factor(Year)1983 -9.403e-02  1.171e-02  -8.030 9.81e-16 ***
+as.factor(Year)1984 -7.564e-02  1.166e-02  -6.486 8.84e-11 ***
+as.factor(Year)1985 -6.511e-02  1.167e-02  -5.581 2.40e-08 ***
+as.factor(Year)1986 -4.833e-02  1.167e-02  -4.140 3.48e-05 ***
+as.factor(Year)1987 -4.981e-02  1.165e-02  -4.276 1.90e-05 ***
+as.factor(Year)1988 -4.673e-02  1.166e-02  -4.009 6.10e-05 ***
+as.factor(Year)1989 -6.678e-02  1.162e-02  -5.748 9.07e-09 ***
+as.factor(Year)1990 -2.018e-02  1.217e-02  -1.658  0.09735 .  
+as.factor(Year)1991  5.468e-03  1.237e-02   0.442  0.65843    
+Age_Panel            1.107e-01  8.205e-03  13.497  < 2e-16 ***
+Age2_Panel          -1.682e-03  2.084e-04  -8.071 6.99e-16 ***
+Age3_Panel           7.387e-06  1.706e-06   4.330 1.49e-05 ***
+Education_Panel      1.090e-01  6.271e-04 173.814  < 2e-16 ***
+Family_Size_Panel    8.590e-02  1.118e-03  76.833  < 2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.6266 on 157207 degrees of freedom
+  (282 observations deleted due to missingness)
+Multiple R-squared:  0.2242,	Adjusted R-squared:  0.2241 
+F-statistic:  1623 on 28 and 157207 DF,  p-value: < 2.2e-16
+"
+"0","```r
+# recover u
+sty_panel<- sty_panel%>% 
+  left_join(eq6_year) %>% 
+  mutate(
+  # mutate(g = eq6$coefficients[1] + year_coef + Age*eq6$coefficients[\"Age\"] + Age2*eq6$coefficients[\"Age2\"] + 
+  #          Age3*eq6$coefficients[\"Age3\"] + Completed_Education*eq6$coefficients[\"Completed_Education\"] +    Family_Size_Panel*eq6$coefficients[\"Family_Unit_Size\"],
+         g = eq6$coefficients[1] + year_coef + Age_Panel*eq6$coefficients[\"Age_Panel\"] + Age2_Panel*eq6$coefficients[\"Age2_Panel\"] + 
+           Age3_Panel*eq6$coefficients[\"Age3_Panel\"] + Education_Panel*eq6$coefficients[\"Education_Panel\"] + Family_Size_Panel*eq6$coefficients[\"Family_Size_Panel\"],
+         # excess log income / idiosyncratic component
+         u = log(Household_Earnings_Panels) - g ) %>% 
+  group_by(Age, Year) %>% 
+  mutate(var_u = var(u, na.rm = T)) %>% 
+  ungroup()
+```"
+"1","Joining with `by = join_by(Year)`
+"

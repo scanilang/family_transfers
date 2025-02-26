@@ -1,0 +1,17 @@
+"0","```r
+# estimate the age effects
+fig1a_data <- data.frame(coef= attr(eq4$coefficients, \"names\"), val = eq4$coefficients) %>% 
+  tibble::remove_rownames() %>% 
+  filter(grepl(\"Age\", coef)) %>% 
+  mutate(Age = str_sub(coef,-2,-1),
+         Age = as.numeric(Age),
+         var_rescale = val + age_40_unconditional) 
+  
+# The points in the graph are the age coefficients, rescaled to match the level of variance at age40!!! how to rescale?
+
+(fig1a <- ggplot(fig1a_data, aes(x = Age, y = val)) +
+  geom_line(color=\"#69b3a2\", size=1, alpha=0.9) +
+  labs(x = \"Age\", y = \"Cross-Sectional Variance of Log\", title = \"Fig 1a\") +
+  scale_y_continuous(breaks = seq(0,1, 0.2))+
+  scale_x_continuous(breaks = seq(25,60, 5)))
+```"

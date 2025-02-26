@@ -1,0 +1,8 @@
+"0","```r
+
+(fig1a <- ggplot(fig1a_data, aes(x = Age, y = var_rescale)) +
+  geom_line(color=\"#69b3a2\", size=1, alpha=0.9) +
+  labs(x = \"Age\", y = \"Cross-Sectional Variance of Log\", title = \"Fig 1a\") +
+  scale_y_continuous(breaks = seq(0.0,0.8, 0.1), limits = c(0.2, 0.9))+
+  scale_x_continuous(breaks = seq(25,60, 5)))
+```"

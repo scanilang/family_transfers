@@ -1,0 +1,669 @@
+function T_in(r,n,m,j,y, a_income,past_in, past_out)
+    mid_age = 18.5 + 2*j
+
+    coeffs = Dict(
+        2 => (6.88947511481 , 0.00121740270 , 0.00749542460 ,-0.00459191500 ,-0.00005486597 , 0.07004822458 , 0.04670516967 ,-0.00210332801),
+        1 => (6.6035818222, 0.0095830592,  0.0900519139,  0.0389215454, -0.0005368056, -0.0541085359 , 0.3211887915 , 0.1051951615, -0.0243307556)
+    )
+
+    b0, b1, b2, b3, b4, b5, b6, b7, b8 = coeffs[r]
+    val = b0 + b1 *y + b2 * a_income + b3 * mid_age + b4 *mid_age^2 + b5 * n + b6 * m + b7 * past_in + b8 * past_out
+
+    return exp(val)
+end
+
+# transfer out amount
+function T_out(r,n,m,j,y, a_income,past_in, past_out)
+    mid_age = 18.5 + 5*j
+
+    coeffs = Dict(
+        2 => (4.2573681000,  0.3192836519,  0.0364153123, -0.0182140611,  0.0002762131 ,-0.0030246662, -0.5319160972, -0.4828498216,  0.1276356941),
+        1 =>  (3.3796025367 , 0.2202076596,  0.0746510492 , 0.0621806159 ,-0.0004826339, -0.0506216942,-0.2100958860 ,-0.1807154818 , 0.1473149461)
+    )
+
+    b0, b1, b2, b3, b4, b5, b6, b7, b8 = coeffs[r]
+    val = b0 + b1 *y + b2 * a_income + b3 * mid_age + b4 *mid_age^2 + b5 * n + b6 * m + b7 * past_in + b8 * past_out
+    return exp(val)
+end
+
+# probability of transfer in
+function shocks_in_prob(r,n,m,j,y, a_income, past_in, past_out)
+    # expects log income
+    mid_age = 18.5 + 2*j
+
+    coeffs = Dict(
+        2 => (0.1935162053, -0.0548189097, -0.0015822354, -0.0554594077,  0.0005519718, -0.0470699665, -0.1579915170 , 1.3539778738 ,-0.1969049929),
+        1 => (0.8381654842, -0.1291436026,  0.0003580771, -0.0534765859,  0.0003081279,  0.0021488484, -0.0478808541,  1.5110288946, -0.1505140980)
+    )
+
+    b0, b1, b2, b3, b4, b5, b6, b7, b8 = coeffs[r]
+    val = b0 + b1 *y + b2 * a_income + b3 * mid_age + b4 *mid_age^2 + b5 * n + b6 * m + b7 * past_in + b8 * past_out
+
+    return cdf(Normal(), val)
+end
+
+# probability of transfer out
+function shocks_out_prob(r,n,m, j, y, a_income, past_in, past_out)
+    # expects log income
+    mid_age = 18.5 + 2*j
+
+    coeffs = Dict(
+        2 => (-2.2977011040, 0.1105367254,  0.0473795787, -0.0368460081,  0.0002306334, -0.0536157163,  0.1260119013, -0.0477841035,  1.4198155113),
+        1 => (-3.9001720200 , 0.0926701133 , 0.0175840802 , 0.0402322238, -0.0005255023, -0.1058016931 , 0.2196014642 ,-0.0690472710,  1.4287880778)
+    )
+
+    b0, b1, b2, b3, b4, b5, b6, b7, b8 = coeffs[r]
+    val = b0 + b1 *y + b2 * a_income + b3 * mid_age + b4 *mid_age^2 + b5 * n + b6 * m + b7 * past_in + b8 * past_out
+
+    return cdf(Normal(), val)
+end
+
+
+
+
+
+
+
+
+pos_effect(a) = (1 + 0.04(1-0.2))a
+
+p1 = plot(0:300000,pos_effect.(0:300000),label="pos_effect(a) = 1.032a", xlabel="a", ylabel="pos_effect(a)", title="Plot of pos_effect(a)", grid=true, linecolor=:blue, linewidth=2)
+
+
+
+######################################################################
+# Expected Value Functions
+######################################################################
+
+# expected value family shock
+function EV5(v,j,i_z,ap1, past_in, past_out, tau_in, tau_out)
+    past_in, past_out = t_update(past_in, past_out, tau_in, tau_out)
+    v_itp = LinearInterpolation((j_grid, z_grid, a_grid,t_grid, t_grid, t_grid, t_grid), v, extrapolation_bc=Line())
+
+    EV_new = 0
+    # stupid version first
+    for (i_zp1, zp1) in enumerate(z_grid)
+        # next period income and shocks
+        yp1 = g(r,j,e,n) + exp(zp1)
+        yp1_plus_govt = yp1 + gov_t(j+1,yp1,ap1, m, n)
+        ap1_income = rate*ap1
+        shock_in = shocks_in_prob(r,n,m, j+1, log(yp1_plus_govt), log(ap1_income),past_in, past_out)
+        shock_out = shocks_out_prob(r,n,m, j+1, log(yp1_plus_govt), log(ap1_income),past_in, past_out)
+
+        val1 = v_itp(j+1, zp1, ap1, past_in, past_out, 0, 1)  # shock_in = 0, shock_out = 1
+        val2 = v_itp(j+1, zp1, ap1, past_in, past_out, 1, 1)  # shock_in = 1, shock_out = 1
+        val3 = v_itp(j+1, zp1, ap1, past_in, past_out, 1, 0)  # shock_in = 1, shock_out = 0
+        val4 = v_itp(j+1, zp1, ap1, past_in, past_out, 0, 0)  # shock_in = 0, shock_out = 0
+
+        EV_new += Pimat[i_z, i_zp1] * (
+            val1 * (1 - shock_in) * shock_out + 
+            val2 * shock_in * shock_out + 
+            val3 * shock_in * (1 - shock_out) + 
+            val4 * (1 - shock_in) * (1 - shock_out)
+        )
+    end
+    return EV_new
+end
+
+
+function EV(v,j,i_z,ap1, past_in, past_out, tau_in, tau_out, m, n )
+    past_in, past_out = t_update(past_in, past_out, tau_in, tau_out)
+    v_itp = LinearInterpolation((j_grid, z_grid, a_grid,t_grid, t_grid, t_grid, t_grid), v, extrapolation_bc=Line())
+
+    EV_new = 0
+    # stupid version first
+    for (i_zp1, zp1) in enumerate(z_grid)
+        # next period income and shocks
+        yp1 = g(r,j,e,n) + exp(zp1)
+        yp1_plus_govt = yp1 + gov_t(j+1,yp1,ap1, m, n)
+        ap1_income = rate*ap1
+        shock_in = shocks_in_prob(r,n,m, j+1, log(yp1_plus_govt), log(ap1_income),past_in, past_out)
+        shock_out = shocks_out_prob(r,n,m, j+1, log(yp1_plus_govt), log(ap1_income),past_in, past_out)
+
+        val1 = v_itp(j+1, zp1, ap1, past_in, past_out, 0, 1)  # shock_in = 0, shock_out = 1
+        val2 = v_itp(j+1, zp1, ap1, past_in, past_out, 1, 1)  # shock_in = 1, shock_out = 1
+        val3 = v_itp(j+1, zp1, ap1, past_in, past_out, 1, 0)  # shock_in = 1, shock_out = 0
+        val4 = v_itp(j+1, zp1, ap1, past_in, past_out, 0, 0)  # shock_in = 0, shock_out = 0
+
+        EV_new += Pimat[i_z, i_zp1] * (
+            val1 * (1 - shock_in) * shock_out + 
+            val2 * shock_in * shock_out + 
+            val3 * shock_in * (1 - shock_out) + 
+            val4 * (1 - shock_in) * (1 - shock_out)
+        )
+    end
+    return EV_new
+end
+
+function EW(w,j,i_z,ap1, past_in, past_out, tau_in, tau_out)
+    past_in, past_out = t_update(past_in, past_out, tau_in, tau_out)
+    w_itp = LinearInterpolation((jw_grid, z_grid, a_grid,t_grid, t_grid, t_grid, t_grid), w, extrapolation_bc=Line())
+    z = z_grid[i_z]
+    EW_new = 0
+
+    yp1 = 0.4 * (g(r,21,e,n) + exp(z_grid[i_z]))
+    yp1_plus_govt = yp1 + gov_t(j+1,yp1,ap1, m, n)
+    a_income = rate * ap1
+    shock_in = shocks_in_prob(r,n,m, j+1, log(yp1_plus_govt), log(a_income), past_in, past_out)
+    shock_out = shocks_out_prob(r,n,m, j+1, log(yp1_plus_govt), log(a_income), past_in, past_out)
+
+    val1 = w_itp(j+1, z, ap1, past_in, past_out, 0, 1)  # shock_in = 0, shock_out = 1
+    val2 = w_itp(j+1, z, ap1, past_in, past_out, 1, 1)  # shock_in = 1, shock_out = 1
+    val3 = w_itp(j+1, z, ap1, past_in, past_out, 1, 0)  # shock_in = 1, shock_out = 0
+    val4 = w_itp(j+1, z, ap1, past_in, past_out, 0, 0)  # shock_in = 0, shock_out = 0
+
+    EW_new += (
+            val1 * (1 - shock_in) * shock_out + 
+            val2 * shock_in * shock_out + 
+            val3 * shock_in * (1 - shock_out) + 
+            val4 * (1 - shock_in) * (1 - shock_out)
+        )
+    return EW_new
+end
+
+# Bellman operator
+function T_v(v, w, r, e)
+    VF_new = similar(v)
+    PF_new = similar(v)
+
+    v_itp = LinearInterpolation((j_grid, z_grid, a_grid,t_grid, t_grid, t_grid, t_grid), v, extrapolation_bc=Line())
+    Tcoefs =  [ 0.0738068535 0.041096308 ; 0.0863142844   0.0183175377 ] # out,in x white, black
+
+    Threads.@threads for j in j_grid
+        # family size depending on period
+        n = (j >= 5 && j <= 13) ? n : m+1
+
+        for (i_z, z) in enumerate(z_grid), (i_a, a) in enumerate(a_grid), past_in in t_grid, past_out in t_grid, tau_in in t_grid, tau_out in t_grid
+            if (j = 1 && e > 0 ||j == 2 && e == 4)
+                # budget constraint if enrolled
+                tuition = d - T_e
+                y = 0 
+            else
+                # budget constraint if working
+                y =  g(r,j,e,n) + exp(z) 
+            end
+                
+                # total resources 
+                y =  g(r,j,e,n) + exp(z) 
+                gov_amount = gov_t(j,y,a, m, n)
+                a_income = rate * a
+            
+                transfer_in  =  tau_in * T_in(r,n,m,j,log(y_plus_g), log(a_income), past_in, past_out) 
+                transfer_out = tau_out * T_out(r,n,m,j,log(y), log(a_income), past_in, past_out)
+                monotonicity_requirement = a/Tcoefs[1,r] * (1 + r(1-tau_a) + transfer_in* Tcoefs[2,r] )
+                if gov_amount > 0
+                    Y =  (1 + rate*(1-tau_a))a + y + gov_amount - tau_y(y + gov_amount, m) + transfer_in
+            else
+                Y =  (1 + rate*(1-tau_a))a + y - tau_y(y, m) + transfer_in - min(transfer_out, monotonicity_requirement)
+            end
+            Y = max(0,Y)
+
+            if j <=20
+                # working period
+                obj_w(ap1) = -(u(Y-ap1,s) + beta * EV(v,j,i_z,ap1, past_in, past_out, tau_in, tau_out))
+                result = optimize(obj_w, 0, Y, Brent())
+            else
+                # period before retirement
+                obj_r1(ap1) = -(u(Y-ap1,s) + beta * EW(w,j,i_z,ap1, past_in, past_out, tau_in, tau_out))
+                result = optimize(obj_r1, 0, Y, Brent())
+            end
+
+            VF_new[j, i_z, i_a, past_in + 1, past_out + 1, tau_in+ 1, tau_out+ 1] = -Optim.minimum(result)
+            PF_new[j, i_z, i_a, past_in+ 1, past_out + 1, tau_in+ 1, tau_out+ 1] = Optim.minimizer(result)
+        end
+    end
+
+    return VF_new, PF_new
+end
+
+function T_w(w, r, e, m,)
+    WF_new = similar(w)
+    WPF_new = similar(w)
+    s = oecd(m,m+1)
+    w_itp = LinearInterpolation((jw_grid, z_grid, a_grid,t_grid, t_grid, t_grid, t_grid), v, extrapolation_bc=Line())
+    Threads.@threads for j in jw_grid
+        for (i_z, z) in enumerate(z_grid), (i_a, a) in enumerate(a_grid), past_in in t_grid, past_out in t_grid, tau_in in t_grid, tau_out in t_grid
+            
+            # total resources 
+            y =  0.4 * g(r,21,e,n) + exp(z) 
+            gov_amount = gov_t(j,y,a, m, n)
+            a_income = rate*a
+            Tcoefs =  [ 0.0738068535 0.041096308 ; 0.0863142844   0.0183175377 ] # out,in x white, black
+            transfer_in  =  tau_in * T_in(r,n,m,j,log(y_plus_g), log(a_income), past_in, past_out) 
+            transfer_out = tau_out * T_out(r,n,m,j,log(y), log(a_income), past_in, past_out)
+            monotonicity_requirement = a/Tcoefs[1,r] * (1 + r(1-tau_a) + transfer_in* Tcoefs[2,r] )
+            if gov_amount > 0
+                Y =  (1 + rate*(1-tau_a))a + y + gov_amount- tau_y(y + gov_amount, m) +transfer_in 
+            else
+                Y =  (1 + rate*(1-tau_a))a + y - tau_y(y, m) + transfer_in - min(transfer_out, monotonicity_requirement)           
+            end
+            Y = max(0,Y)
+            if j <33
+            # retirement
+                obj_r2(ap1) = -(u(Y-ap1,s) + beta * survival_data[j-21,r]* EW(w,j,i_z,ap1, past_in, past_out, tau_in, tau_out))
+                result = optimize(obj_r2, 0, Y, Brent())
+
+                WF_new[j, i_z, i_a, past_in + 1, past_out + 1, tau_i + 1, tau_out + 1] = -Optim.minimum(result)
+                WPF_new[j, i_z, i_a, past_in + 1, past_out + 1, tau_in + 1, tau_out + 1 ] = Optim.minimizer(result)
+            else
+                # last period of life
+                WF_new[j, i_z, i_a, past_in + 1, past_out + 1, tau_in + 1, tau_out + 1] = u(Y,s)
+                WPF_new[j, i_z, i_a, past_in + 1, past_out+ 1, tau_in + 1, tau_out+1] = 0
+            end
+        end
+    end
+    return WF_new, WPF_new
+end
+
+
+function egm(r, apnts,zpnts, inc_input,tol = 1e-9, max_iter = 10000)
+
+    # Step 0: grid for tomorrow's capital and today's shock
+    a_grid = [0; polyexpandgrid(apnts-1, exp(7), exp(20), 1.3)] 
+    Pimat, z_grid = Markov(zpnts, inc_input)
+
+    # initial guess
+    VF2 = zeros(21,zpnts, apnts,  2, 2, 2, 2, 2, 6) # j, z, a, shock_in, shock_out, past_in, past_out, m, n
+    WF2 = ones(10,zpnts, apnts,  2, 2, 2, 2, 2) # j, z, a, shock_in, shock_out, past_in, past_out, m
+    VF2, PF1= T_v(VF2, WF2)
+
+    iters = 0
+
+    while (iters < max_iters)
+        iters += 1
+        function u_prime_inv(v,m, n)
+            s = oecd(m,n)
+            return v^(-1 / gamma) * s
+        end
+        
+        for m in m_grid
+            for n in n_grid
+                if m == 0 && n == 6
+                    continue  # Skip this iteration
+                end
+                    
+                # Step 1: consumption decision
+                c = u_prime_inv.(twoside_deriv(VF2, j_grid, z_grid, a_grid) )
+
+        # Step 2: 
+        # today's end of period resources as function of tomorrows capital and todays shock
+        Y = c .+ a_grid
+        # today's updated value function
+        VF1 = u(c,s) .+ VF2
+
+        # Step 3: Interpolate VF1 to obtain its value on a grid of tomorrow's end of period resources
+        VF1_prime = similar(VF1)
+        for (i,a) in enumerate(z_grid)
+
+        end
+        
+        # Step 4: Optain new VF2
+        VF2_new = similar(VF2)
+
+
+        if (dist < tol)
+            print("Solution found: $iters iterations and $dist" error)
+
+             # Step 5
+            PF, WPF = a_solve(Ytoday_VF, Ytoday_WF, z_grid, asset_grid, r,m,n)
+            APF, AWPF  = ap1_solve(Ytoday_VF, Ytoday_WF, z_grid, asset_grid, r, m ,n)
+            return VF1today, WF1today,PF, WPF, APF, AWPF  #Ytoday_VF, Ytoday_WF# 
+        end
+
+    end
+
+    if iters == max_iters
+        print("Max Iterations Reached")
+        return VF1today, WF1today, Ytoday_VF, Ytoday_W
+    end
+
+end
+
+
+
+
+
+function check_Y_increases(a::Float64, rate::Float64, tau_a::Float64, 
+    y::Float64, tau_y::Float64, tau_in::Float64, 
+    tau_out::Float64, params...)
+
+# Calculate direct effect
+direct_effect = (1 + rate * (1 - tau_a))
+
+# Calculate government transfer effect
+gov_effect = ForwardDiff.derivative(x -> gov_t(params..., x), a)
+
+# Calculate transfer out effect
+tout_effect = ForwardDiff.derivative(x -> T_out(params..., log(x)), a)
+
+# Total effect
+total_effect = direct_effect + gov_effect - tau_out * tout_effect
+
+return total_effect > 0, total_effect
+end
+
+function twoside_deriv(v, j_grid, z_grid, a_grid, h = 1e-9)
+    v_itp = LinearInterpolation((j_grid, z_grid, a_grid,t_grid, t_grid, t_grid, t_grid, t_grid, n_grid), v, extrapolation_bc=Line())
+    Va = (v_itp(j_grid, z_grid, a_grid .+ h,0:1, 0:1, 0:1, 0:1, 0:1, 1:6) .- v_itp(j_grid, z_grid, a_grid .- h, 0:1,0:1, 0:1, 0:1, 0:1, 1:6)) ./ (2*h)
+    return Va
+end
+
+
+# PERIOD 1-3 EXPECTINGSINGLE NO KIDS
+function EV1(v1,r, j,i_z,e, ap1, past_in, past_out, tau_in, tau_out)
+    m = 0
+    n = 1
+    past_in, past_out = t_update(past_in, past_out, tau_in, tau_out)
+    v_itp = LinearInterpolation((j1_grid, z_grid, e_grid, a_grid,t_grid, t_grid, t_grid, t_grid), v1, extrapolation_bc=Line())
+
+    ap1_income = rate*ap1
+
+    if (j == 1 && e == 4)
+        # still in school next period
+        yp1_plus_govt = gov_t(j+1,0,ap1, m, n)
+        shock_in = shocks_in_prob(r,n,m, j+1, log(yp1_plus_govt), log(ap1_income),past_in, past_out)
+        shock_out = shocks_out_prob(r,n,m, j+1, log(yp1_plus_govt), log(ap1_income),past_in, past_out)
+
+        # z doesnt matter here 
+        val1 = v_itp(j+1, z_grid[i_z], e, ap1, past_in, past_out, 0, 1)  # shock_in = 0, shock_out = 1
+        val2 = v_itp(j+1, z_grid[i_z], e, ap1, past_in, past_out, 1, 1)  # shock_in = 1, shock_out = 1
+        val3 = v_itp(j+1, z_grid[i_z], e, ap1, past_in, past_out, 1, 0)  # shock_in = 1, shock_out = 0
+        val4 = v_itp(j+1, z_grid[i_z], e, ap1, past_in, past_out, 0, 0)  # shock_in = 0, shock_out = 0
+
+        EV_new = (
+                val1 * (1 - shock_in) * shock_out + 
+                val2 * shock_in * shock_out + 
+                val3 * shock_in * (1 - shock_out) + 
+                val4 * (1 - shock_in) * (1 - shock_out)
+            )
+    else
+        EV_new = 0
+        # working next period
+        for (i_zp1, zp1) in enumerate(z_grid)
+            # next period income and shocks
+            yp1 = g(r,j,e,n) + exp(zp1)
+            yp1_plus_govt = yp1 + gov_t(j+1,yp1,ap1, m, n)
+            shock_in = shocks_in_prob(r,n,m, j+1, log(yp1_plus_govt), log(ap1_income),past_in, past_out)
+            shock_out = shocks_out_prob(r,n,m, j+1, log(yp1_plus_govt), log(ap1_income),past_in, past_out)
+
+            val1 = v_itp(j+1, zp1, e, ap1, past_in, past_out, 0, 1)  # shock_in = 0, shock_out = 1
+            val2 = v_itp(j+1, zp1, e, ap1, past_in, past_out, 1, 1)  # shock_in = 1, shock_out = 1
+            val3 = v_itp(j+1, zp1, e, ap1, past_in, past_out, 1, 0)  # shock_in = 1, shock_out = 0
+            val4 = v_itp(j+1, zp1, e, ap1, past_in, past_out, 0, 0)  # shock_in = 0, shock_out = 0
+
+            EV_new += Pimat[i_z, i_zp1] * (
+                val1 * (1 - shock_in) * shock_out + 
+                val2 * shock_in * shock_out + 
+                val3 * shock_in * (1 - shock_out) + 
+                val4 * (1 - shock_in) * (1 - shock_out)
+            )
+        end
+    end
+    return EV_new
+end
+
+# PERIOD 4 EXPECTING WORKING WITH KIDS
+function EV5(v2,r, j,i_z,e, ap1, past_in, past_out, tau_in, tau_out)
+
+    v_itp = LinearInterpolation((j2_grid, z_grid, e_grid, a_grid,t_grid, t_grid, t_grid, t_grid, m_grid, n_grid), v2, extrapolation_bc=Line())
+    
+    EV5_val  = (EV2(v2,j,i_z,e, ap1, past_in, past_out, tau_in, tau_out, 0, 1) * fam_distrib[1, r+3] + # single
+                EV2(v2,j,i_z,e, ap1, past_in, past_out, tau_in, tau_out, 0, 2) * fam_distrib[2, r+3]+ 
+                EV2(v2,j,i_z,e, ap1, past_in, past_out, tau_in, tau_out, 0, 3) * fam_distrib[3, r+3]+
+                EV2(v2,j,i_z,e, ap1, past_in, past_out, tau_in, tau_out, 0, 4) * fam_distrib[4, r+3]+
+              #  EV2(v2,j,i_z,e, ap1, past_in, past_out, tau_in, tau_out, 0, 5) * fam_distrib[5, r+3]+
+                EV2(v2,j,i_z,e, ap1, past_in, past_out, tau_in, tau_out, 1, 2) * fam_distrib[1, r+1]+ # married
+                EV2(v2,j,i_z,e, ap1, past_in, past_out, tau_in, tau_out, 1, 3) * fam_distrib[2, r+1]+
+                EV2(v2,j,i_z,e, ap1, past_in, past_out, tau_in, tau_out, 1, 4) * fam_distrib[3, r+1]+
+                EV2(v2,j,i_z,e, ap1, past_in, past_out, tau_in, tau_out, 1, 5) * fam_distrib[4, r+1])#+
+              #  EV2(v2,j,i_z,e, ap1, past_in, past_out, tau_in, tau_out, 1, 6) * fam_distrib[5, r+1])
+    return EV5_val
+end
+
+# PERIOD 5-12 EXPECTING FAMILY WORKiNG
+function EV2(v2,r, j,i_z,e, ap1, past_in, past_out, tau_in, tau_out, m , n)
+    past_in, past_out = t_update(past_in, past_out, tau_in, tau_out)
+    v_itp = LinearInterpolation((j2_grid, z_grid, e_grid, a_grid,t_grid, t_grid, t_grid, t_grid, m_grid, n_grid), v2, extrapolation_bc=Line())
+
+    # precompute income and shocks
+    ap1_income = rate*ap1
+    yp1_grid = g(r,j,e,n) .+ exp(z_grid)
+    yp1_plus_govt = yp1 .+ gov_t(j+1, yp1, ap1, m, n) 
+    log_yp1_plus_govt = log.(log_yp1_plus_govt)
+    shock_in_grid = shocks_in_prob.(r,n,m, j+1, log_yp1_plus_govt, log_yp1_plus_govt,past_in, past_out)
+    shock_out_grid = shocks_out_prob.(r,n,m, j+1, log_yp1_plus_govt, log_yp1_plus_govt,past_in, past_out)
+
+    EV_new = 0
+    # stupid version first
+    for (i_zp1, zp1) in enumerate(z_grid)
+        shock_in = shock_in_vals[i_zp1]
+        shock_out = shock_out_vals[i_zp1]
+
+        val1 = v_itp(j+1, zp1, e, ap1, past_in, past_out, 0, 1, m , n)  # shock_in = 0, shock_out = 1
+        val2 = v_itp(j+1, zp1, e, ap1, past_in, past_out, 1, 1, m , n)  # shock_in = 1, shock_out = 1
+        val3 = v_itp(j+1, zp1, e, ap1, past_in, past_out, 1, 0, m , n)  # shock_in = 1, shock_out = 0
+        val4 = v_itp(j+1, zp1, e, ap1, past_in, past_out, 0, 0, m , n)  # shock_in = 0, shock_out = 0
+
+        EV_new += Pimat[i_z, i_zp1] * (
+            val1 * (1 - shock_in) * shock_out + 
+            val2 * shock_in * shock_out + 
+            val3 * shock_in * (1 - shock_out) + 
+            val4 * (1 - shock_in) * (1 - shock_out)
+        )
+    end
+    return EV_new
+end
+
+# PERIOD 13-21 EXPECTING WORKING NO KIDS
+function EV3(v3,r, j,i_z,e, ap1, past_in, past_out, tau_in, tau_out, m)
+    past_in, past_out = t_update(past_in, past_out, tau_in, tau_out)
+    v_itp = LinearInterpolation((j3_grid, z_grid, e_grid, a_grid,t_grid, t_grid, t_grid, t_grid, m_grid), v3, extrapolation_bc=Line())
+    n = m + 1
+    
+    # precompute income and shocks
+    log_ap1_income = log(rate*ap1)
+    yp1_grid = g(r,j,e,n) .+ exp.(z_grid)
+    yp1_plus_govt = yp1_grid .+ gov_t.(j+1, yp1_grid, ap1, m, n) 
+    log_yp1_plus_govt = log.(yp1_plus_govt)
+    shock_in_grid = shocks_in_prob.(r,n,m, j+1, log_yp1_plus_govt, log_ap1_income,past_in, past_out)
+    shock_out_grid = shocks_out_prob.(r,n,m, j+1, log_yp1_plus_govt, log_ap1_income,past_in, past_out)
+
+    # interpolate over v
+    vals = [v_itp(j+1, zp1, e, ap1, past_in, past_out, shock_in, shock_out, m)  * (shock_in == 1 ? shock_in_grid[i_zp1] : 1 - shock_in_grid[i_zp1]) * (shock_out == 1 ? shock_out_grid[i_zp1] : 1 - shock_out_grid[i_zp1]) for (i_zp1, zp1) in enumerate(z_grid), shock_in in t_grid, shock_out in t_grid]
+    sum_vals = [sum(vals[i, :, :]) for i in 1:length(z_grid)]
+    EVEV_new = sum(Pimat[i_z,:] .* sum_vals)
+
+    EV_new = 0
+    # stupid version first
+    for (i_zp1, zp1) in enumerate(z_grid)
+        shock_in = shock_in_vals[i_zp1]
+        shock_out = shock_out_vals[i_zp1]
+
+        val1 = v_itp(j+1, zp1, e, ap1, past_in, past_out, 0, 1, m )  # shock_in = 0, shock_out = 1
+        val2 = v_itp(j+1, zp1, e, ap1, past_in, past_out, 1, 1, m)  # shock_in = 1, shock_out = 1
+        val3 = v_itp(j+1, zp1, e, ap1, past_in, past_out, 1, 0, m)  # shock_in = 1, shock_out = 0
+        val4 = v_itp(j+1, zp1, e, ap1, past_in, past_out, 0, 0, m)  # shock_in = 0, shock_out = 0
+
+        EV_new += Pimat[i_z, i_zp1] * (
+            val1 * (1 - shock_in) * shock_out + 
+            val2 * shock_in * shock_out + 
+            val3 * shock_in * (1 - shock_out) + 
+            val4 * (1 - shock_in) * (1 - shock_out)
+        )
+    end
+    return EV_new
+end
+
+# PERIODS 22 - 33 EXPECTION RETIREMENT
+function EW(w,r, j,i_z,e, ap1, past_in, past_out, tau_in, tau_out, m)
+    n = m+1
+    past_in, past_out = t_update(past_in, past_out, tau_in, tau_out)
+    w_itp = LinearInterpolation((jw_grid, z_grid, e_grid, a_grid,t_grid, t_grid, t_grid, t_grid, m_grid), w, extrapolation_bc=Line())
+    z = z_grid[i_z]
+    EW_new = 0
+
+    yp1 = 0.4 * (g(r,21,e,n) + exp(z_grid[i_z]))
+    yp1_plus_govt = yp1 + gov_t(j+1,yp1,ap1, m, n)
+    a_income = rate * ap1
+    shock_in = shocks_in_prob(r,n,m, j+1, log(yp1_plus_govt), log(a_income), past_in, past_out)
+    shock_out = shocks_out_prob(r,n,m, j+1, log(yp1_plus_govt), log(a_income), past_in, past_out)
+
+    val1 = w_itp(j+1, z, e, ap1, past_in, past_out, 0, 1, m)  # shock_in = 0, shock_out = 1
+    val2 = w_itp(j+1, z, e, ap1, past_in, past_out, 1, 1, m)  # shock_in = 1, shock_out = 1
+    val3 = w_itp(j+1, z, e, ap1, past_in, past_out, 1, 0, m)  # shock_in = 1, shock_out = 0
+    val4 = w_itp(j+1, z, e, ap1, past_in, past_out, 0, 0, m)  # shock_in = 0, shock_out = 0
+
+    EW_new += (
+            val1 * (1 - shock_in) * shock_out + 
+            val2 * shock_in * shock_out + 
+            val3 * shock_in * (1 - shock_out) + 
+            val4 * (1 - shock_in) * (1 - shock_out)
+        )
+    return EW_new
+end
+
+
+function g(r,j,e,n)
+    mid_age = (18.5 + 2*j)
+    e_adjustments = Dict(
+        (2, 0) => -0.857437303, (2, 2) => -0.669916495, (2, 4) => 0.0,
+        (1, 0) => -0.427457616, (1, 2) => -0.191776015, (1, 4) => 0.0
+    )
+
+    if r == 2
+        g = 8.683897019 + 0.136201881 *mid_age - 0.001395129*mid_age^2 - 0.000002581*mid_age^3 + 0.056068424*n + e_adjustments[(2,e)]
+    else
+        g = 8.436323967 +  0.189316327*mid_age - 0.003358923*(mid_age^2)  + 0.000018850*(mid_age^3) + 0.088107741*n +e_adjustments[(1,e)]
+
+    end
+    return exp(g)
+end
+
+
+v2_income = [g(r, j, e, n) + z for j in j2_grid, z in z_grid, e in e_grid, n in n_grid] 
+gov_income = [gov_t(j,y,a, m, n) for t in j2_grid, y in v2_income, a in a_grid, m in m_grid, n in n_grid]
+
+# income + government transfers
+v2_gov_income = [g(r, j, e, n) + z + gov_t(j, g(r, j, e, n) + z, a, m, n)
+                 for j in j2_grid, z in z_grid, e in e_grid, a in a_grid, m in m_grid, n in n_grid]
+log_a_income = [log(rate * max(a, 1)) for a in a_grid]
+transfer_in = [tau_in * T_in(r,n,m,j,log(y_plus_g), log_a_income, past_in, past_out) for a in a_grid, past_in in t_grid, past_out in a_grid]
+
+
+
+function Y_precompute(j_grid, z_grid, e_grid, a_grid)
+    Y_grid = zeros(r, length(j_grid),length(z_grid), 3,length(a_grid), 2, 2, 2, 2, 2, 5) # r, j, z, e, a, shock_in, shock_out, past_in, past_out, m, n
+    Tcoefs =  [ 0.0738068535 0.041096308 ; 0.0863142844   0.0183175377 ] # out,in x white, black
+
+    Threads.@threads for r in 1:2
+        for j in j_grid, (i_z, z) in enumerate(z_grid), (i_e, e) in enumerate(e_grid), (i_a, a) in enumerate(a_grid), past_in in t_grid, past_out in t_grid, tau_in in t_grid, tau_out in t_grid
+
+            if j <= 4
+            # single no kids
+                m = 0
+                n = 1
+
+                y =  g(r,j,e,n) + z 
+                gov_amount = gov_t(j,y,a, m, n)
+                y_plus_g  = y + gov_amount
+                log_yp1_plus_govt = log.(max.(1, yp1_plus_govt))
+                log_a_income  = log(rate * max(a, 1))
+                ransfer_in  =  tau_in * T_in(r,n,m,j,log_yp1_plus_govt, log_a_income, past_in, past_out) 
+                transfer_out = tau_out * T_out(r,n,m,j,log_yp1_plus_govt, log_a_income, past_in, past_out)
+                monotonicity_requirement = a/Tcoefs[1,r] * (1 + rate*(1-tau_a) + transfer_in* Tcoefs[2,r] )
+                if gov_amount > 0
+                    Y =  (1 + rate*(1-tau_a))a + y_plus_g - tau_y(y_plus_g, m) + transfer_in
+                else
+                    Y =  (1 + rate*(1-tau_a))a + y - tau_y(y, m) + transfer_in - min(transfer_out, monotonicity_requirement)
+                end
+                Y_grid[r, j, i_z, i_e, i_a, past_in + 1, past_out + 1, tau_in + 1, tau_out + 1, m + 1 , n] = max(0.01,Y)
+
+            
+            else
+                # family shock
+                for m in m_grid
+                    if j <= 13
+                        # with kids
+                        for n in n_grid
+                            y =  g(r,j,e,n) + z 
+                            gov_amount = gov_t(j,y,a, m, n)
+                            y_plus_g  = y + gov_amount
+                            log_yp1_plus_govt = log.(max.(1, yp1_plus_govt))
+                            log_a_income  = log(rate * max(a, 1))
+                            ransfer_in  =  tau_in * T_in(r,n,m,j,log_yp1_plus_govt, log_a_income, past_in, past_out) 
+                            transfer_out = tau_out * T_out(r,n,m,j,log_yp1_plus_govt, log_a_income, past_in, past_out)
+                            monotonicity_requirement = a/Tcoefs[1,r] * (1 + rate*(1-tau_a) + transfer_in* Tcoefs[2,r] )
+                            if gov_amount > 0
+                                Y =  (1 + rate*(1-tau_a))a + y_plus_g - tau_y(y_plus_g, m) + transfer_in
+                            else
+                                Y =  (1 + rate*(1-tau_a))a + y - tau_y(y, m) + transfer_in - min(transfer_out, monotonicity_requirement)
+                            end
+                            Y_grid[r, j, i_z, i_e, i_a, past_in + 1, past_out + 1, tau_in + 1, tau_out + 1, m + 1 , n] = max(0.01,Y)            
+                        end
+
+                    elseif j <= 22
+                        # no kids
+                        n = m+ 1
+                        y =  g(r,j,e,n) + z 
+                        gov_amount = gov_t(j,y,a, m, n)
+                        y_plus_g  = y + gov_amount
+                        log_yp1_plus_govt = log.(max.(1, yp1_plus_govt))
+                        log_a_income  = log(rate * max(a, 1))
+                        ransfer_in  =  tau_in * T_in(r,n,m,j,log_yp1_plus_govt, log_a_income, past_in, past_out) 
+                        transfer_out = tau_out * T_out(r,n,m,j,log_yp1_plus_govt, log_a_income, past_in, past_out)
+                        monotonicity_requirement = a/Tcoefs[1,r] * (1 + rate*(1-tau_a) + transfer_in* Tcoefs[2,r] )
+                        if gov_amount > 0
+                            Y =  (1 + rate*(1-tau_a))a + y_plus_g - tau_y(y_plus_g, m) + transfer_in
+                        else
+                            Y =  (1 + rate*(1-tau_a))a + y - tau_y(y, m) + transfer_in - min(transfer_out, monotonicity_requirement)
+                        end
+                        Y_grid[r, j, i_z, i_e, i_a, past_in + 1, past_out + 1, tau_in + 1, tau_out + 1, m + 1 , n] = max(0.01,Y)
+        
+
+                    else 
+                        # retired no kids
+                        y =  g(r,j,e,n) + z 
+                        gov_amount = gov_t(j,y,a, m, n)
+                        y_plus_g  = y + gov_amount
+                        log_yp1_plus_govt = log.(max.(1, yp1_plus_govt))
+                        log_a_income  = log(rate * max(a, 1))
+                        ransfer_in  =  tau_in * T_in(r,n,m,j,log_yp1_plus_govt, log_a_income, past_in, past_out) 
+                        transfer_out = tau_out * T_out(r,n,m,j,log_yp1_plus_govt, log_a_income, past_in, past_out)
+                        monotonicity_requirement = a/Tcoefs[1,r] * (1 + rate*(1-tau_a) + transfer_in* Tcoefs[2,r] )
+                        if gov_amount > 0
+                            Y =  (1 + rate*(1-tau_a))a + y_plus_g - tau_y(y_plus_g, m) + transfer_in
+                        else
+                            Y =  (1 + rate*(1-tau_a))a + y - tau_y(y, m) + transfer_in - min(transfer_out, monotonicity_requirement)
+                        end
+                        Y_grid[r, j, i_z, i_e, i_a, past_in + 1, past_out + 1, tau_in + 1, tau_out + 1, m + 1 , n] = max(0.01,Y)
+        
+                else
+
+            end
+
+
+
+            # working
+            if j <=22
+                y =  g(r,j,e,n) + z 
+                gov_amount = gov_t(j,y,a, m, n)
+                y_plus_g  = y + gov_amount
+                log_yp1_plus_govt = log.(max.(1, yp1_plus_govt))
+                log_a_income  = log(rate * max(a, 1))
+                transfer_in  =  tau_in * T_in(r,n,m,j,log_yp1_plus_govt, log_a_income, past_in, past_out) 
+                transfer_out = tau_out * T_out(r,n,m,j,log_yp1_plus_govt, log_a_income, past_in, past_out)
+                monotonicity_requirement = a/Tcoefs[1,r] * (1 + rate*(1-tau_a) + transfer_in* Tcoefs[2,r] )
+            else
+
+            if gov_amount > 0
+                Y =  (1 + rate*(1-tau_a))a + y_plus_g - tau_y(y_plus_g, m) + transfer_in
+            else
+                Y =  (1 + rate*(1-tau_a))a + y - tau_y(y, m) + transfer_in - min(transfer_out, monotonicity_requirement)
+            end
+
+            
+        end
+    end
+    return Y_grid
+end
+

@@ -1,0 +1,32 @@
+---
+title: "Untitled"
+author: "Sara Canilang"
+date: '2025-02-21'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(margins)
+library(brglm2)
+#######################################################################################
+# Read in clean data
+#######################################################################################
+
+psid_model_data = read.csv('../../data/psid_model_data.csv')
+```
+
+
+```{r}
+
+black_probit_out = glm(Provided_Support_Indicator ~ log_nonasset_income + log_asset_income + midpoint_age + midpoint_age2 + avg_FU_size + Marital_Status + received_transfer_past + provided_transfer_past + Birth_Cohort + Year_bins,
+                       family = binomial(link = "probit"),  method = "brglmFit",
+                       data = psid_model_data %>% filter(Race_Head == "Black")%>% filter(!is.na(provided_transfer_past)))
+
+black_probit_in = glm(Received_Support_Indicator ~ log_nonasset_income + log_asset_income  + midpoint_age + midpoint_age2 + avg_FU_size + Marital_Status + received_transfer_past + provided_transfer_past + Birth_Cohort + Year_bins,
+                      family = binomial(link = "probit"),  method = "brglmFit",
+                      data = psid_model_data %>% filter(Race_Head == "Black")%>% filter(!is.na(provided_transfer_past)))
+
+stargazer::stargazer(black_probit_out, black_probit_in)
+
+```

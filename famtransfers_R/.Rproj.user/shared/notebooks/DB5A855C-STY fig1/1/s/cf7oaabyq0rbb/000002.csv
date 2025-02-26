@@ -1,0 +1,7 @@
+"0","```r
+# d. Cross-sectional moments by time
+fig1c <- ggplot(fig1a_data, aes(x = Age, y = val)) +
+  geom_line(color=\"#69b3a2\", size=1, alpha=0.9) +
+  labs(x = \"Age-Normalized Cross-Sectional Variance of Persistent Shock \", y = \"1968-1993\", title = \"Fig 1d\") +
+  scale_x_continuous(breaks = seq(25,60, 5))
+```"

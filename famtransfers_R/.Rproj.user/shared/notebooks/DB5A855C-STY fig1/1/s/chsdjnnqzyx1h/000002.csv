@@ -1,0 +1,133 @@
+"0","```r
+eq4 <- lm(var_u ~ as.factor(Age_Panel) + BirthCohort_Panel, data = sty_panel)
+
+summary(eq4)
+```"
+"1","
+Call:
+lm(formula = var_u ~ as.factor(Age_Panel) + BirthCohort_Panel, 
+    data = sty_panel)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-0.33917 -0.06175 -0.00995  0.04787  0.62635 
+
+Coefficients:
+                        Estimate Std. Error t value Pr(>|t|)    
+(Intercept)             0.286178   0.017876  16.009  < 2e-16 ***
+as.factor(Age_Panel)23  0.002862   0.003437   0.833 0.405084    
+as.factor(Age_Panel)24 -0.017136   0.003243  -5.283 1.27e-07 ***
+as.factor(Age_Panel)25 -0.037523   0.003202 -11.720  < 2e-16 ***
+as.factor(Age_Panel)26 -0.054681   0.003186 -17.164  < 2e-16 ***
+as.factor(Age_Panel)27 -0.048599   0.003173 -15.315  < 2e-16 ***
+as.factor(Age_Panel)28 -0.044295   0.003173 -13.959  < 2e-16 ***
+as.factor(Age_Panel)29 -0.039016   0.003175 -12.290  < 2e-16 ***
+as.factor(Age_Panel)30 -0.041411   0.003182 -13.013  < 2e-16 ***
+as.factor(Age_Panel)31 -0.041245   0.003193 -12.919  < 2e-16 ***
+as.factor(Age_Panel)32 -0.040547   0.003203 -12.657  < 2e-16 ***
+as.factor(Age_Panel)33 -0.036375   0.003217 -11.307  < 2e-16 ***
+as.factor(Age_Panel)34 -0.033636   0.003229 -10.417  < 2e-16 ***
+as.factor(Age_Panel)35 -0.026721   0.003244  -8.237  < 2e-16 ***
+as.factor(Age_Panel)36 -0.015770   0.003258  -4.840 1.30e-06 ***
+as.factor(Age_Panel)37 -0.001051   0.003275  -0.321 0.748341    
+as.factor(Age_Panel)38  0.007085   0.003293   2.151 0.031439 *  
+as.factor(Age_Panel)39  0.014421   0.003315   4.350 1.36e-05 ***
+as.factor(Age_Panel)40  0.022488   0.003335   6.743 1.55e-11 ***
+as.factor(Age_Panel)41  0.031972   0.003363   9.507  < 2e-16 ***
+as.factor(Age_Panel)42  0.047365   0.003380  14.014  < 2e-16 ***
+as.factor(Age_Panel)43  0.063156   0.003401  18.569  < 2e-16 ***
+as.factor(Age_Panel)44  0.084916   0.003423  24.809  < 2e-16 ***
+as.factor(Age_Panel)45  0.100794   0.003458  29.151  < 2e-16 ***
+as.factor(Age_Panel)46  0.114240   0.003495  32.686  < 2e-16 ***
+as.factor(Age_Panel)47  0.129888   0.003523  36.864  < 2e-16 ***
+as.factor(Age_Panel)48  0.143913   0.003548  40.556  < 2e-16 ***
+as.factor(Age_Panel)49  0.155035   0.003560  43.549  < 2e-16 ***
+as.factor(Age_Panel)50  0.161601   0.003574  45.222  < 2e-16 ***
+as.factor(Age_Panel)51  0.161687   0.003594  44.983  < 2e-16 ***
+as.factor(Age_Panel)52  0.159287   0.003621  43.992  < 2e-16 ***
+as.factor(Age_Panel)53  0.172675   0.003641  47.422  < 2e-16 ***
+as.factor(Age_Panel)54  0.202083   0.003659  55.232  < 2e-16 ***
+as.factor(Age_Panel)55  0.241754   0.003683  65.642  < 2e-16 ***
+as.factor(Age_Panel)56  0.278324   0.003702  75.189  < 2e-16 ***
+as.factor(Age_Panel)57  0.300418   0.003719  80.768  < 2e-16 ***
+as.factor(Age_Panel)58  0.315586   0.003753  84.084  < 2e-16 ***
+as.factor(Age_Panel)59  0.312356   0.004035  77.419  < 2e-16 ***
+as.factor(Age_Panel)60  0.307186   0.004809  63.872  < 2e-16 ***
+BirthCohort_Panel1910  -0.129389   0.019699  -6.568 5.11e-11 ***
+BirthCohort_Panel1911  -0.140343   0.018689  -7.509 5.98e-14 ***
+BirthCohort_Panel1912  -0.039117   0.018378  -2.129 0.033295 *  
+BirthCohort_Panel1913  -0.061853   0.018160  -3.406 0.000659 ***
+BirthCohort_Panel1914  -0.103986   0.018044  -5.763 8.28e-09 ***
+BirthCohort_Panel1915  -0.047872   0.017962  -2.665 0.007695 ** 
+BirthCohort_Panel1916  -0.005001   0.017945  -0.279 0.780499    
+BirthCohort_Panel1917   0.005706   0.017894   0.319 0.749809    
+BirthCohort_Panel1918  -0.043621   0.017819  -2.448 0.014365 *  
+BirthCohort_Panel1919  -0.081236   0.017760  -4.574 4.79e-06 ***
+BirthCohort_Panel1920  -0.120891   0.017748  -6.812 9.69e-12 ***
+BirthCohort_Panel1921  -0.135452   0.017743  -7.634 2.29e-14 ***
+BirthCohort_Panel1922  -0.119647   0.017751  -6.740 1.59e-11 ***
+BirthCohort_Panel1923  -0.057789   0.017748  -3.256 0.001130 ** 
+BirthCohort_Panel1924  -0.024572   0.017713  -1.387 0.165366    
+BirthCohort_Panel1925   0.039696   0.017688   2.244 0.024824 *  
+BirthCohort_Panel1926  -0.008635   0.017682  -0.488 0.625309    
+BirthCohort_Panel1927  -0.032533   0.017680  -1.840 0.065754 .  
+BirthCohort_Panel1928  -0.070339   0.017691  -3.976 7.02e-05 ***
+BirthCohort_Panel1929  -0.033885   0.017690  -1.915 0.055433 .  
+BirthCohort_Panel1930  -0.019751   0.017688  -1.117 0.264153    
+BirthCohort_Panel1931  -0.014211   0.017696  -0.803 0.421933    
+BirthCohort_Panel1932   0.015341   0.017702   0.867 0.386138    
+BirthCohort_Panel1933   0.048431   0.017712   2.734 0.006250 ** 
+BirthCohort_Panel1934   0.010259   0.017706   0.579 0.562340    
+BirthCohort_Panel1935  -0.005394   0.017702  -0.305 0.760574    
+BirthCohort_Panel1936  -0.019920   0.017706  -1.125 0.260591    
+BirthCohort_Panel1937   0.022120   0.017710   1.249 0.211665    
+BirthCohort_Panel1938   0.037352   0.017711   2.109 0.034948 *  
+BirthCohort_Panel1939   0.034922   0.017699   1.973 0.048487 *  
+BirthCohort_Panel1940   0.028155   0.017694   1.591 0.111563    
+BirthCohort_Panel1941   0.001425   0.017692   0.081 0.935822    
+BirthCohort_Panel1942   0.005326   0.017690   0.301 0.763360    
+BirthCohort_Panel1943  -0.003492   0.017686  -0.197 0.843496    
+BirthCohort_Panel1944   0.031120   0.017676   1.761 0.078305 .  
+BirthCohort_Panel1945   0.030057   0.017669   1.701 0.088932 .  
+BirthCohort_Panel1946   0.043230   0.017666   2.447 0.014401 *  
+BirthCohort_Panel1947   0.053899   0.017670   3.050 0.002286 ** 
+BirthCohort_Panel1948   0.097706   0.017676   5.528 3.25e-08 ***
+BirthCohort_Panel1949   0.111539   0.017680   6.309 2.82e-10 ***
+BirthCohort_Panel1950   0.112722   0.017681   6.375 1.83e-10 ***
+BirthCohort_Panel1951   0.128541   0.017680   7.270 3.60e-13 ***
+BirthCohort_Panel1952   0.172654   0.017684   9.763  < 2e-16 ***
+BirthCohort_Panel1953   0.179731   0.017688  10.161  < 2e-16 ***
+BirthCohort_Panel1954   0.177332   0.017696  10.021  < 2e-16 ***
+BirthCohort_Panel1955   0.176560   0.017703   9.974  < 2e-16 ***
+BirthCohort_Panel1956   0.208226   0.017713  11.755  < 2e-16 ***
+BirthCohort_Panel1957   0.209279   0.017723  11.808  < 2e-16 ***
+BirthCohort_Panel1958   0.181179   0.017737  10.215  < 2e-16 ***
+BirthCohort_Panel1959   0.174615   0.017751   9.837  < 2e-16 ***
+BirthCohort_Panel1960   0.144277   0.017772   8.118 4.76e-16 ***
+BirthCohort_Panel1961   0.152516   0.017799   8.569  < 2e-16 ***
+BirthCohort_Panel1962   0.177998   0.017843   9.976  < 2e-16 ***
+BirthCohort_Panel1963   0.224215   0.017914  12.516  < 2e-16 ***
+BirthCohort_Panel1964   0.286779   0.018033  15.903  < 2e-16 ***
+BirthCohort_Panel1965   0.269567   0.018219  14.796  < 2e-16 ***
+BirthCohort_Panel1966   0.216790   0.018470  11.737  < 2e-16 ***
+BirthCohort_Panel1967   0.165878   0.018966   8.746  < 2e-16 ***
+BirthCohort_Panel1968   0.214451   0.020471  10.476  < 2e-16 ***
+BirthCohort_Panel1969   0.322391   0.024302  13.266  < 2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.0974 on 152598 degrees of freedom
+  (4821 observations deleted due to missingness)
+Multiple R-squared:  0.3933,	Adjusted R-squared:  0.3929 
+F-statistic:  1009 on 98 and 152598 DF,  p-value: < 2.2e-16
+"
+"0","```r
+# used for scaling
+# age_40_unconditional <- sty_panel%>% 
+#   group_by(Age_Panel) %>% 
+#   summarize(var_u = var(u, na.rm = T)) %>% 
+#   filter(Age_Panel == 40) %>% pull(2)
+age_40 <- sty_panel %>% filter(Age_Panel == 40)
+age_40_unconditional <- var(age_40$u, na.rm= T)
+
+```"

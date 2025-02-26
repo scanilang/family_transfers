@@ -1,0 +1,200 @@
+function simulate_model_inputs(N, seed, model, inc_race_input, t_in_race_input, t_out_race_input, prob_in_race_input, prob_out_race_input, surv_race_input)
+    
+    # model parameters
+    (; beta, rate, tax_a, gamma, co, cw, zpnts, apnts, asset_grid) = model
+
+    # set seed
+    Random.seed!(seed)
+
+    # zgrids 
+    Pimat_white, zgrid_white = Markov(zpnts, 1)
+    Pimat_black, zgrid_black = Markov(zpnts, 2)
+
+    # race distribution (for now equal distribution)
+    num_white = Int(floor(N/2))
+    num_black = Int(ceil(N/2))
+    fam_size = zeros(Int, N)
+    mar_stat = zeros(Int, N)
+
+    race_mat = [repeat([1], num_white); repeat([2],num_black)]
+
+    # race dependent inputs 
+    inc_input_vec = assign_race_input(inc_race_input, race_mat, N)
+    t_out_prob_vec = assign_race_input(prob_out_race_input, race_mat, N)
+    t_in_prob_vec = assign_race_input(prob_in_race_input, race_mat, N)
+    surv_input_vec = assign_race_input(surv_race_input, race_mat, N)
+    t_in_amount_vec = assign_race_input(t_in_race_input, race_mat, N)
+    t_out_amount_vec = assign_race_input(t_out_race_input, race_mat, N)
+
+    # family structure distribution
+    fam_size[1:num_white], mar_stat[1:num_white] = white_fam_structure(num_white, seed)
+    fam_size[(num_white + 1):N], mar_stat[(num_white + 1):N] = black_fam_structure(num_black, seed+1)
+
+    # placeholders
+    cons_mat = zeros(N,16)
+    z_mat = zeros(N,16)
+    asset_mat = zeros(N,16) # initial condition 0
+    age_mat = zeros(N,16)
+    shock_out_mat = zeros(N,16)
+    shock_in_mat = zeros(N,16)
+    t_in_mat = zeros(N,16)
+    t_out_mat = zeros(N,16)
+    GT_mat = zeros(N,16)
+    y_mat = zeros(N,16)
+    Y_mat = zeros(N,16)
+    BTY_mat = zeros(N,16)
+    alive_mat = ones(N,16)
+    past_in_mat = zeros(N,16)
+    past_out_mat = zeros(N,16)
+
+    # draw transfer and income shocks
+    shock_in_draws = rand(N,16)
+    shock_out_draws = rand(N,16)
+    survival_draws = rand(N,6)
+
+    eps_draws_white = rand(Normal(0, 0.4245223), num_white, 16)
+    if inc_race_input == 1
+        eps_draws_black = rand(Normal(0, 0.4245223), num_black, 16)
+    else
+        eps_draws_black = rand(Normal(0, 0.4434178), num_black, 16)
+    end
+
+    # precompute policy functions
+    pf_grids = [policy_functions[inc_input_vec[i], t_in_amount_vec[i], t_out_amount_vec[i], t_in_prob_vec[i], t_out_prob_vec[i],
+                    surv_input_vec[i], fam_size[i], mar_stat[i]] for i in 1:N]
+    wpf_grids = [policy_functions_w[inc_input_vec[i], t_in_amount_vec[i], t_out_amount_vec[i], t_in_prob_vec[i], t_out_prob_vec[i],
+                    surv_input_vec[i], fam_size[i], mar_stat[i]] for i in 1:N]
+
+    # model simulation
+    @inbounds for t in 2:16
+        # update age
+        age_mat[:, t] = age_mat[:, t-1] .+ 1 
+
+        if t <= 5
+            # update state variables
+            z_mat[(1:num_white),t] = 0.872804 .* z_mat[(1:num_white),t-1] .+ eps_draws_white[:,t]
+            if inc_race_input == 1
+                z_mat[(num_white + 1):N,t] = 0.86144 .* z_mat[(num_white + 1):N,t-1] .+ eps_draws_black[:,t]
+            else
+                z_mat[(num_white + 1):N,t] = 0.872804 .* z_mat[(num_white + 1):N,t-1] .+ eps_draws_black[:,t]
+            end
+            log_income = g.(inc_input_vec,t-1,fam_size) + z_mat[:,t] # log income
+            y_mat[:,t] = exp.(log_income) # income
+            GT_mat[:,t] = GT.(t-1,y_mat[:,t],asset_mat[:,t-1],  mar_stat, fam_size, cw, co, tax_a, rate) # government trasnfers 
+            BTY_mat[:,t] = y_mat[:,t] .+ rate.* asset_mat[:,t-1] .+ GT_mat[:,t] # before tax resources
+
+            # update transfer shock
+            shock_out_mat[:, t] = shock_out_draws[:, t] .< shocks_out_prob.(t_out_prob_vec, fam_size, mar_stat, t-1, log.(BTY_mat[:,t]), past_in_mat[:,t], past_out_mat[:,t])
+            shock_in_mat[:, t] = shock_in_draws[:, t] .< shocks_in_prob.(t_in_prob_vec, fam_size, mar_stat, t-1, log.(BTY_mat[:,t]), past_in_mat[:,t], past_out_mat[:,t])
+
+            # update past transfer indicator
+            past_in_mat[:,t+1] =  max.(past_in_mat[:,t], shock_in_mat[:, t])
+            past_out_mat[:,t+1] =  max.(past_out_mat[:,t], shock_out_mat[:, t])
+        
+            t_in_mat[:, t] = shock_in_mat[:, t] .* transfers_in_amount.(t_in_amount_vec,fam_size,mar_stat,t-1,BTY_mat[:,t])
+            t_out_mat[:, t] = shock_out_mat[:, t] .* transfers_out_amount.(t_out_amount_vec,fam_size,mar_stat,t-1,BTY_mat[:,t])
+
+            Y_mat[:,t] = Y_solve_inputs.(inc_input_vec, t_in_amount_vec, t_out_amount_vec,t-1,mar_stat,fam_size,shock_in_mat[:, t], 
+                shock_out_mat[:, t] , z_mat[:,t], asset_mat[:,t-1], cw, co, tax_a, rate) # resources
+            #Y_solve_inputs.(inc_input, t_in_amount, t_out_amount
+            # asset choice
+            for i in 1:N
+                if inc_input_vec[i] == 1
+                    itp = LinearInterpolation((1:9, zgrid_white, asset_grid, 0:1, 0:1, 0:1, 0:1), pf_grids[i], extrapolation_bc = Flat())
+                elseif inc_input_vec[i] == 2
+                    itp = LinearInterpolation((1:9, zgrid_black, asset_grid, 0:1, 0:1, 0:1, 0:1), pf_grids[i], extrapolation_bc = Flat())
+                end
+                asset_mat[i, t] = itp(t-1,z_mat[i,t],asset_mat[i,t-1], shock_in_mat[i, t], shock_out_mat[i, t], past_in_mat[i,t], past_out_mat[i,t]) 
+            end
+        
+        elseif t <= 10
+            # update income 
+            z_mat[(1:num_white),t] = 0.872804 .* z_mat[(1:num_white),t-1] + eps_draws_white[:,t]
+            if inc_race_input == 0
+                z_mat[(num_white + 1):N,t] = 0.86144 .* z_mat[(num_white + 1):N,t-1] .+ eps_draws_black[:,t]
+            else
+                z_mat[(num_white + 1):N,t] = 0.872804 .* z_mat[(num_white + 1):N,t-1] .+ eps_draws_black[:,t]
+            end
+            log_income = g.(inc_input_vec,t-1,mar_stat .+ 1) + z_mat[:,t] # log income
+            y_mat[:,t] = exp.(log_income)
+            GT_mat[:,t] = GT.(t-1,y_mat[:,t],asset_mat[:,t-1],  mar_stat, mar_stat .+1, cw, co, tax_a, rate) # government transfers (in logs)
+            BTY_mat[:,t] = y_mat[:,t] .+ rate.* asset_mat[:,t-1] .+ GT_mat[:,t] # before tax resources
+
+            # update transfer shock
+            shock_out_mat[:, t] = shock_out_draws[:, t] .< shocks_out_prob.(t_out_prob_vec, mar_stat .+ 1, mar_stat, t-1, log.(BTY_mat[:,t]), past_in_mat[:,t], past_out_mat[:,t])
+            shock_in_mat[:, t] = shock_in_draws[:, t] .< shocks_in_prob.(t_in_prob_vec, mar_stat .+ 1, mar_stat, t-1, log.(BTY_mat[:,t]), past_in_mat[:,t], past_out_mat[:,t])
+
+            # update past transfer indicator
+            past_in_mat[:,t+1] =  max.(past_in_mat[:,t], shock_in_mat[:, t])
+            past_out_mat[:,t+1] =  max.(past_out_mat[:,t], shock_out_mat[:, t])
+  
+            t_in_mat[:, t] = shock_in_mat[:, t] .* transfers_in_amount.(t_in_amount_vec,mar_stat .+ 1,mar_stat,t-1,BTY_mat[:,t])
+            t_out_mat[:, t] = shock_out_mat[:, t] .* transfers_out_amount.(t_out_amount_vec,mar_stat .+ 1,mar_stat,t-1,BTY_mat[:,t])
+
+            Y_mat[:,t] = Y_solve_inputs.(inc_input_vec, t_in_amount_vec, t_out_amount_vec,t-1,mar_stat,mar_stat .+ 1,
+                            shock_in_mat[:, t], shock_out_mat[:, t] , z_mat[:,t], asset_mat[:,t-1], cw, co, tax_a, rate) # resources
+
+             # asset choice
+            for i in 1:N
+                if inc_input_vec[i] == 1
+                    itp = LinearInterpolation((1:9, zgrid_white, asset_grid, 0:1, 0:1, 0:1, 0:1), pf_grids[i], extrapolation_bc = Flat())
+                elseif inc_input_vec[i] == 2
+                    itp = LinearInterpolation((1:9, zgrid_black, asset_grid, 0:1, 0:1, 0:1, 0:1), pf_grids[i], extrapolation_bc = Flat())
+                end
+                asset_mat[i, t] = itp(t-1,z_mat[i,t],asset_mat[i,t-1], shock_in_mat[i, t], shock_out_mat[i, t], past_in_mat[i,t], past_out_mat[i,t])
+            end
+        else
+            y_mat[:,t] = 0.4 * y_mat[:,9] # income
+            GT_mat[:,t] = GT.(t-1,y_mat[:,t],asset_mat[:,t-1],  mar_stat, mar_stat .+ 1, cw, co, tax_a, rate) # government transfers 
+            BTY_mat[:,t] = y_mat[:,t] .+ rate.* asset_mat[:,t-1] .+ GT_mat[:,t] # before tax resources
+
+            # update transfer shock
+            shock_out_mat[:, t] = shock_out_draws[:, t] .< shocks_out_prob.(t_out_prob_vec, mar_stat .+ 1, mar_stat, t-1, log.(BTY_mat[:,t]), past_in_mat[:,t], past_out_mat[:,t])
+            shock_in_mat[:, t] = shock_in_draws[:, t] .< shocks_in_prob.(t_in_prob_vec, mar_stat .+ 1, mar_stat, t-1, log.(BTY_mat[:,t]), past_in_mat[:,t], past_out_mat[:,t])
+
+            # update past transfer indicator
+            past_in_mat[:,t+1] =  max.(past_in_mat[:,t], shock_in_mat[:, t])
+            past_out_mat[:,t+1] =  max.(past_out_mat[:,t], shock_out_mat[:, t])
+
+            t_in_mat[:, t] = shock_in_mat[:, t] .* transfers_in_amount.(t_in_amount_vec,mar_stat .+ 1,mar_stat,t-1,BTY_mat[:,t])
+            t_out_mat[:, t] = shock_out_mat[:, t] .* transfers_out_amount.(t_out_amount_vec,mar_stat .+ 1,mar_stat,t-1,BTY_mat[:,t])
+
+            #alive_mat[:,t] = survival_draws[:,t-9] .< [repeat([survival_prob[t-1,1]], num_white); repeat([survival_prob[t-1,2]],num_black)]
+            Y_mat[:,t] = Y_solve_inputs.(inc_input_vec, t_in_amount_vec, t_out_amount_vec,t-1,mar_stat,mar_stat .+ 1,
+                shock_in_mat[:, t], shock_out_mat[:, t] , z_mat[:,t], asset_mat[:,t-1], cw, co, tax_a, rate) # resources
+
+             # asset choice
+             for i in 1:N
+                # survival shock
+                if alive_mat[i,t-1] == 0
+                    alive_mat[i,t] = 0
+                elseif race_mat == 1
+                    alive_mat[i,t] = survival_draws[i,t-9] .< survival_prob[t-1,1]
+                else 
+                    alive_mat[i,t] = survival_draws[i,t-9] .< survival_prob[t-1,2]
+                end
+                
+                if inc_input_vec[i] == 1
+                    itp = LinearInterpolation((1:9, zgrid_white, asset_grid, 0:1, 0:1, 0:1, 0:1), pf_grids[i], extrapolation_bc = Flat())
+                elseif inc_input_vec[i] == 2
+                    itp = LinearInterpolation((1:9, zgrid_black, asset_grid, 0:1, 0:1, 0:1, 0:1), pf_grids[i], extrapolation_bc = Flat())
+                end
+                asset_mat[i, t] = itp(t-1,z_mat[i,t],asset_mat[i,t-1], shock_in_mat[i, t], shock_out_mat[i, t], past_in_mat[i,t], past_out_mat[i,t])
+            end
+
+        end 
+    end
+    asset_mat[alive_mat .== 0] .= NaN
+    z_mat[alive_mat .== 0] .= NaN
+    y_mat[alive_mat .== 0] .= NaN
+    Y_mat[alive_mat .== 0] .= NaN
+    shock_in_mat[alive_mat .== 0] .= NaN
+    shock_out_mat[alive_mat .== 0] .= NaN
+    t_in_mat[alive_mat .== 0] .= NaN
+    t_out_mat[alive_mat .== 0] .= NaN
+    GT_mat[alive_mat .== 0] .= NaN
+    past_in_mat[alive_mat .== 0] .= NaN
+    past_out_mat[alive_mat .== 0] .= NaN
+
+    return (; age_mat, asset_mat, z_mat, y_mat, Y_mat, shock_in_mat, shock_out_mat, t_in_mat, t_out_mat,GT_mat,past_in_mat, past_out_mat, fam_size, mar_stat)
+end

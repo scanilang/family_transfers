@@ -1,0 +1,103 @@
+library(dplyr)
+
+# import data
+psid_long_raw <- read.csv("data clean/raw data/psid_long_raw_sty.csv") 
+
+# add labels
+psid_labels <- psid_long_raw %>% 
+  mutate(Survey_Year = as.numeric(Survey_Year),
+         Employment_Status_Head = case_when(Survey_Year <= 1975 & Employment_Status_Head == 1 ~ "Working now, or only temporarily laid off",
+                                            Survey_Year > 1975 & Employment_Status_Head == 1 ~ "Working now",
+                                            Survey_Year > 1975 & Employment_Status_Head == 2 ~ "Only temporarily laid off",
+                                            (Survey_Year <= 1975 & Employment_Status_Head == 2)|
+                                              (Survey_Year > 1975 & Employment_Status_Head == 3) ~ "Looking for work, unemployed",
+                                            Survey_Year <= 1975 & Employment_Status_Head == 3 ~ "Retired, permanently disabled",
+                                            Survey_Year > 1975 & Employment_Status_Head == 4 ~ "Retired",
+                                            Survey_Year > 1975 & Employment_Status_Head == 5 ~ "Permanently disabled",
+                                            (Survey_Year <= 1975 & Employment_Status_Head == 4)|
+                                              (Survey_Year > 1975 & Employment_Status_Head == 6)  ~ "Housewife",
+                                            (Survey_Year <= 1975 & Employment_Status_Head == 5)|
+                                              (Survey_Year > 1975 & Employment_Status_Head == 7) ~ "Student",
+                                            (Survey_Year <= 1975 & Employment_Status_Head == 6)|
+                                              (Survey_Year > 1975 & Employment_Status_Head == 8) ~ "Other"),
+         Employment_Status_Spouse = factor(Employment_Status_Spouse, levels = 0:9, 
+                                           labels = c("Inap", "Working now", "Only temporarily laid off",
+                                                      "Looking for work, unemployed", "Retired", "Permanently disabled",
+                                                      "HouseWife; keeping house", "Student", "Other", "NA;Dk")),
+         Marital_Status = factor(Marital_Status, levels =1:5, labels = c("Married", "Single", "Widowed", "Divorced", "Separated")),
+         Race_Head = case_when(Race_Head == 1 ~ "White",
+                               Race_Head == 2 ~ "Black",
+                               Survey_Year <= 1984 & Race_Head == 3 ~ "Spanish American, Puerto Rican, Mexican, Cuban",
+                               Survey_Year > 1984 & Race_Head == 3 ~ "American Indian, Aleut, Eskimo",
+                               Race_Head == 4 ~ "Asian, Pacific Islander",
+                               Race_Head == 5 ~ "Mentions Latino origin or descent",
+                               Race_Head == 6 ~ "Mentions color other than black or white",
+                               Race_Head == 7 ~ "Other",
+                               Race_Head == 8 ~ "More than 2 mentions",
+                               Race_Head == 9 ~ NA,
+                               Race_Head == 0 ~ "Inap"),
+         Race_Spouse = case_when(Race_Head == 1 ~ "White",
+                                 Race_Head == 2 ~ "Black",
+                                 Race_Head == 3 ~ "American Indian, Aleut, Eskimo",
+                                 Race_Head == 4 ~ "Asian, Pacific Islander",
+                                 Race_Head == 5 ~ "Mentions Latino origin or descent",
+                                 Race_Head == 6 ~ "Mentions color other than black or white",
+                                 Race_Head == 7 ~ "Other",
+                                 Race_Head == 8 ~ "More than 2 mentions",
+                                 Race_Head == 9 ~ NA,
+                                 Race_Head == 0 ~ "Inap"),
+         Hispanic_Head = case_when(Hispanic_Head == 1 ~ "Mexican",
+                                   Hispanic_Head == 2 ~ "Mexican American",
+                                   Hispanic_Head == 3 ~ "Chicano",
+                                   Hispanic_Head == 4 ~ "Puerto Rican",
+                                   Hispanic_Head == 5 ~ "Cuban",
+                                   Hispanic_Head == 6 ~ "Combination; more than 1 mention",
+                                   Hispanic_Head == 7 ~ "Other Spanish",
+                                   Hispanic_Head == 9 ~ NA,
+                                   Hispanic_Head == 0 ~ "Inap"),
+         Hispanic_Spouse = case_when(Hispanic_Spouse == 1 ~ "Mexican",
+                                     Hispanic_Spouse == 2 ~ "Mexican American",
+                                     Hispanic_Spouse == 3 ~ "Chicano",
+                                     Hispanic_Spouse == 4 ~ "Puerto Rican",
+                                     Hispanic_Spouse == 5 ~ "Cuban",
+                                     Hispanic_Spouse == 6 ~ "Combination; more than 1 mention",
+                                     Hispanic_Spouse == 7 ~ "Other Spanish",
+                                     Hispanic_Spouse == 9 ~ NA,
+                                     Hispanic_Spouse == 0 ~ "Inap"))
+
+psid_household <- psid_labels %>%
+  mutate(# Hours X Hourly Wage
+        Hourly_Wage_Avg_Head = case_when(Survey_Year %in% c(1968, 1971, 1975) & Hourly_Wage_Avg_Head == 99.99 ~ NA,
+                                          Survey_Year >= 1994 & Survey_Year <= 2001 & Hourly_Wage_Avg_Head >= 9999 ~ NA,
+                                          TRUE ~ Hourly_Wage_Avg_Head),
+         Hourly_Wage_Avg_Spouse = case_when(Survey_Year %in% c(1968, 1975) & Hourly_Wage_Avg_Spouse == 99.99 ~ NA,
+                                            Survey_Year >= 1994 & Survey_Year <= 2001 & Hourly_Wage_Avg_Spouse >= 9999 ~ NA,
+                                            TRUE ~ Hourly_Wage_Avg_Spouse),
+         Hours_Worked_Annual_Head = case_when(Hours_Worked_Annual_Head > 5840 ~ NA, # if more than 5840 hours, drop as missing 
+                                              TRUE ~ Hours_Worked_Annual_Head),
+         Hours_Worked_Annual_Spouse = case_when(Hours_Worked_Annual_Spouse > 5840 ~ NA, # if more than 5840 hours, drop as missing 
+                                                TRUE ~ Hours_Worked_Annual_Spouse),
+         Labor_Hourly_Income_Household = Hourly_Wage_Avg_Head * Hours_Worked_Annual_Head + Hourly_Wage_Avg_Spouse *Hours_Worked_Annual_Spouse,
+         # Total Labor Income
+         Business_Labor_Income_Head = if_else(Survey_Year <= 1994 & Survey_Year >= 1997 & Business_Labor_Income_Head == 999999, NA, Business_Labor_Income_Head), # Latino Sample not calculated
+         Business_Labor_Income_Spouse = if_else(Survey_Year <= 1994 & Survey_Year >= 1997 & Business_Labor_Income_Spouse == 999999, NA,Business_Labor_Income_Spouse), # Latino Sample not calculated
+         Farm_Labor_Income_Head = case_when(Survey_Year <= 2013 & Survey_Year >= 1994 & Farm_Labor_Spouse == 4 ~ Farm_Labor_Income_Head_Spouse / 2,
+                                            Survey_Year <= 2013 & Survey_Year >= 1994 & Farm_Labor_Spouse != 4 ~ Farm_Labor_Income_Head_Spouse,
+                                            Survey_Year >= 2015 & Farm_Labor_Spouse == 1 ~ Farm_Labor_Income_Head_Spouse,
+                                            Survey_Year >= 2015 & Farm_Labor_Spouse == 2 ~ 0,
+                                            Survey_Year >= 2015 & Farm_Labor_Spouse == 3 ~ Farm_Labor_Income_Head_Spouse/2,
+                                            Farm_Labor_Income_Head_Spouse == 0 ~ 0,
+                                            TRUE ~ Farm_Labor_Income_Head),
+         Farm_Labor_Income_Spouse = case_when(Survey_Year <= 2013 & Survey_Year >= 1994 & Farm_Labor_Spouse == 4 ~ Farm_Labor_Income_Head_Spouse / 2,
+                                              Survey_Year >= 2015 & Farm_Labor_Spouse == 3 ~ Farm_Labor_Income_Head_Spouse/2,
+                                              Survey_Year >= 2015 & Farm_Labor_Spouse == 2 ~ Farm_Labor_Income_Head_Spouse,
+                                              Survey_Year >= 2015 & Farm_Labor_Spouse == 1 ~ 0,
+                                              Farm_Labor_Income_Head_Spouse == 0 ~ 0,
+                                              TRUE ~ Farm_Labor_Income_Spouse),
+         Total_Labor_Income_Head = case_when(Survey_Year < 1994 ~ Total_Labor_Head, 
+                                             Survey_Year >= 1994 ~ Total_Labor_MFB_Head + Farm_Labor_Income_Head + Business_Labor_Income_Head),
+         Total_Labor_Income_Spouse = case_when(Survey_Year < 1994 ~ Total_Labor_Spouse, 
+                                               Survey_Year >= 1994 ~ Total_Labor_MFB_Spouse + Farm_Labor_Income_Spouse + Business_Labor_Income_Spouse),
+         Total_Labor_Income_Household = Total_Labor_Income_Head + Total_Labor_Income_Spouse)
+
+# add completed education from individual file

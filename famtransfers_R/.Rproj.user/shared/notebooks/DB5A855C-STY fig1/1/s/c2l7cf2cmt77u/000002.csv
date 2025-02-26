@@ -1,0 +1,10 @@
+"0","```r
+library(tidyverse)
+
+# psid household data
+psid_household <- read.csv(\"../data clean/psid_sty_household.csv\") 
+# cpi 1968
+cpi_68 <- read.csv(\"../recession/cpi_68.csv\")
+# gnp recession
+gnp_recession <- read.csv(\"../recession/gnp_recession.csv\")
+```"
