@@ -28,16 +28,7 @@ function oecd(m,n)
     return (1 + 0.7(m) + 0.5(n-(m + 1)))
 end
 
-s_grid = zeros(length(m_grid), length(n_grid))
-for (i_m, m) in enumerate(m_grid), (i_n, n) in enumerate(n_grid)
-    s_grid[i_m, i_n] = oecd(m, n)
-end
-# Expand s_grid to match the dimensions of VF2
-s_grid = [oecd(m, n) for m in m_grid, n in n_grid]
-# add singleton
-s_expanded = reshape(s_grid, 1, 1, 1, 1, 1, 1, 1, 1, 2, 5) 
-# Repeat s_expanded to match the dimensions of VF2
-s_expanded = repeat(s_expanded, outer=(2, 10, 10, 11, 2, 2, 2, 2, 1, 1))
+
 ######################################################################
 # Income and Taxes
 ######################################################################
@@ -82,10 +73,6 @@ function precomputed_income(r, j_grid, e_grid, z_grid, n_grid)
 
     return reshape(flat_results, length(j_grid), length(e_grid), length(n_grid))
 end
-
-v2_gov_income = [g(r, j, e, n) + z + gov_t(j, g(r, j, e, n) + z, a, m, n)
-                 for j in j2_grid, z in z_grid, e in e_grid, a in a_grid, m in m_grid, n in n_grid]
-
 
 # government transfer
 function gov_t(j,y,a, m, n)

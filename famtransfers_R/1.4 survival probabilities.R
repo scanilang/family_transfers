@@ -29,7 +29,7 @@ mortality_wide = mortality_data_clean %>%
   group_by(age_cat) %>% 
   mutate(Black = prod(Black_Ind),
          White = prod(White_Ind), ,
-         j = (min(Age) - 18) / 2 ) %>% 
+         j = (min(Age) - 18) / 2 + 1 ) %>% 
   ungroup() %>% 
   distinct(White,  Black, age_cat, j)  
   

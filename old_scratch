@@ -105,6 +105,26 @@ function EV5(v,j,i_z,ap1, past_in, past_out, tau_in, tau_out)
     return EV_new
 end
 
+function EV2(v2, r, j,i_z,e, ap1, past_in, past_out, tau_in, tau_out, m , n)
+    past_in, past_out = t_update(past_in, past_out, tau_in, tau_out)
+    v_itp = LinearInterpolation((r_grid, j2_grid, z_grid, e_grid, a_grid,t_grid, t_grid, t_grid, t_grid, m_grid, n_grid), v2, extrapolation_bc=Line())
+
+    # precompute income and shocks
+    log_ap1_income  = log(rate * max(ap1, 1))
+    yp1_grid = g(r,j+1,e,n) .+ z_grid
+    yp1_plus_govt = yp1_grid .+ gov_t.(j+1, yp1_grid, ap1, m, n) 
+    log_yp1_plus_govt = log.(max.(1, yp1_plus_govt))
+    shock_in_grid = shocks_in_prob.(r,n,m, j+1, log_yp1_plus_govt, log_ap1_income,past_in, past_out)
+    shock_out_grid = shocks_out_prob.(r,n,m, j+1, log_yp1_plus_govt, log_ap1_income,past_in, past_out)
+    shock_in_grid = shock_in_mat_2[r, j-3, :, i_e, 1, m+1, n]
+    shock_out_grid = shock_in_mat_2[r, j-3, :, i_e, 1, m+1, n]
+    # interpolate over v
+    vals = [v_itp(r, j+1, zp1, e, ap1, past_in, past_out, shock_in, shock_out, m, n)  * (shock_in == 1 ? shock_in_grid[i_zp1] : 1 - shock_in_grid[i_zp1]) * (shock_out == 1 ? shock_out_grid[i_zp1] : 1 - shock_out_grid[i_zp1]) for (i_zp1, zp1) in enumerate(z_grid), shock_in in t_grid, shock_out in t_grid]
+    sum_vals = [sum(vals[i, :, :]) for i in 1:length(z_grid)]
+    EV_new = sum(Pimat[i_z,:] .* sum_vals)
+   
+    return EV_new
+end
 
 function EV(v,j,i_z,ap1, past_in, past_out, tau_in, tau_out, m, n )
     past_in, past_out = t_update(past_in, past_out, tau_in, tau_out)

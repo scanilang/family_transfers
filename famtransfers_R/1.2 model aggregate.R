@@ -46,7 +46,10 @@ psid_model_data <- psid_select %>%
          #Age_recode = if_else(Age_recode == 84, 83, Age_recode),
          age_cat = paste(20 + (Age_recode - 20) %/% 2 * 2, 
                          21 + (Age_recode - 20) %/% 2 * 2, 
-                         sep = "-")) %>% 
+                         sep = "-"),
+         age_cat_large = paste(18 + (Age_recode - 18) %/% 7 * 7, 
+                               24 + (Age_recode - 18) %/% 7 * 7, 
+                               sep = "-")) %>% 
         # age_cat = if_else(age_cat == '20-21', '18-21', age_cat)
   select(Family_ID, ER30001, ER30002, Survey_Year, Year, age_cat, everything()) %>%
   # aggregated variables
@@ -57,12 +60,13 @@ psid_model_data <- psid_select %>%
          years_married = sum(Marital_Status == "Married"),
          avg_FU_size= mean(Family_Unit_Size),
          Year_first = min(Year),
-         midpoint_age = ((20 + (Age_recode - 20) %/% 2 * 2) +  (21 + (Age_recode - 20) %/% 2 * 2)) / 2,
+         midpoint_age = max(Age_recode),
          midpoint_age2 = midpoint_age* midpoint_age,
          midpoint_age3 = midpoint_age2 * midpoint_age,
          # aggregate transfers
          sum_transfer_out = sum(Provided_Family_Support_NetACS),
          sum_transfer_in = sum(Received_Support_Amount_Head_Spouse),
+         sum_net_transfers = sum(Family_Transfers_Net), 
          Received_Support_Indicator = if_else(sum_transfer_in > 0 , 1, 0),
          Provided_Support_Indicator = if_else(sum_transfer_out > 0 , 1, 0),
          # aggregate income
@@ -78,7 +82,7 @@ psid_model_data <- psid_select %>%
          # bottom code income
          sum_total_income = if_else(sum_total_income <= 1.5, 1.5, sum_total_income),
          sum_nonasset_income = if_else(sum_nonasset_income <= 1.5, 1.5, sum_nonasset_income), 
-         sum_asset_income = if_else(sum_asset_income <= 1.5, 1.5, sum_asset_income), 
+         sum_asset_income = if_else(sum_asset_income <= 100, 1, sum_asset_income), 
          sum_asset_income_threshold = if_else(sum_asset_income > 100, sum_asset_income, 0),
          # log income
          log_asset_income = log(sum_asset_income),
@@ -118,9 +122,9 @@ psid_model_data <- psid_select %>%
   # filter
   filter(n == 2) %>%
   filter(years_married %in% c(0,2)) %>% 
-  distinct(ER30001, ER30002, Year_first, Year_bins,Year_Born,Birth_Cohort, age_cat,min_age, midpoint_age, midpoint_age2, midpoint_age3, Race_Head, Marital_Status, avg_FU_size,Head_College,
+  distinct(ER30001, ER30002, Year_first, Year_bins,Year_Born,Birth_Cohort, age_cat,age_cat_large, min_age, midpoint_age, midpoint_age2, midpoint_age3, Race_Head, Marital_Status, avg_FU_size,Head_College,
            sum_total_fam, sum_total_income,sum_nonasset_income, sum_asset_income, sum_labor_uiwc, sum_public_transfers,sum_labor_head,log_total_income,  log_nonasset_income, log_asset_income,log_labor_income, 
-           log_labor_uiwc_income, log_uiwc_income, sum_transfer_out, sum_transfer_in, Provided_Support_Indicator,Received_Support_Indicator, received_transfer_past, provided_transfer_past) %>% 
+           log_labor_uiwc_income, log_uiwc_income, sum_transfer_out, sum_transfer_in,sum_net_transfers, Provided_Support_Indicator,Received_Support_Indicator, received_transfer_past, provided_transfer_past) %>% 
   arrange(ER30001, ER30002, age_cat)
 
 # write output

@@ -8,52 +8,34 @@ library(stargazer)
 
 psid_model_data = read.csv('../../data/psid_model_data.csv')
 
-# bottom and top coding income
 psid_income_data = psid_model_data %>% 
   filter(midpoint_age >= 22 & midpoint_age <= 60) %>% 
   group_by(Race_Head, Year_first) %>% 
-  mutate(income_5th = quantile(sum_labor_uiwc[sum_labor_uiwc > 0], 0.05),
-         income_95th = quantile(sum_labor_uiwc[sum_labor_uiwc > 0], 0.95),
-         sum_labor_uiwc = if_else(sum_labor_uiwc < income_5th, income_5th, sum_labor_uiwc),
-         sum_labor_uiwc = if_else(sum_labor_uiwc > income_95th, income_95th, sum_labor_uiwc),
-         log_labor_uiwc_income = log(sum_labor_uiwc))
-
+  filter(log_labor_uiwc_income > 0) 
 
 #######################################################################################
 # Overlapping panel (STY 2004)
 #######################################################################################
 
 # three-period overlapping panel 
-# psid_income_panel = psid_income_data %>% 
-#   mutate(Panel_Year = Year_first) %>% 
-#   full_join(psid_income_data %>% mutate(Panel_Year = Year_first - 2)) %>% 
-#   full_join(psid_income_data %>% mutate(Panel_Year = Year_first - 4)) %>% 
-#   group_by(ER30001, ER30002, Panel_Year) %>% 
-#   mutate(n = n()) %>% 
-#   ungroup() %>% 
-#   select(ER30001, ER30002, Panel_Year, n, everything()) %>%
-#   filter(n == 3) %>% 
-#   arrange(ER30001, ER30002, Panel_Year, Year_first)
-
-# two-period overlapping panel 
 psid_income_panel = psid_income_data %>%
   mutate(Panel_Year = Year_first) %>%
   full_join(psid_income_data %>% mutate(Panel_Year = Year_first - 2)) %>%
+  full_join(psid_income_data %>% mutate(Panel_Year = Year_first - 4)) %>%
   group_by(ER30001, ER30002, Panel_Year) %>%
-  mutate(n = n()) %>%
-  ungroup() %>%
+  mutate(n = n(),
+         lag_income = if_else(lag(Year_first) == Year_first - 2, lag(sum_labor_uiwc), NA),
+         growth = (sum_labor_uiwc)/lag_income,
+         tag_growth = if_else(abs(growth) > 20 | abs(growth) < (1/20), 1, 0),
+         tag_remove = if_else(sum(tag_growth, na.rm  = T) > 0, 1, 0)) %>% 
+  ungroup() %>% 
   select(ER30001, ER30002, Panel_Year, n, everything()) %>%
-  filter(n == 2) %>%
-  arrange(ER30001, ER30002, Panel_Year, Year_first)
+  filter(n == 3, tag_remove == 0) %>%
+  arrange(ER30001, ER30002, Panel_Year, Year_first) 
 
-#All income values below the 5th percentile or above the 95th percentile
-#among the positive values for that variable in a given year are replaced
-#with these 5th and 95th percentile values in that year. 
 
 #Each panel begins in a year and consists of observations over that year and the next two years
-#when income data are present in all three years and when (winsorized)
-#income does not increase or decrease by more than a factor of 20 between
-#any two consecutive years.
+#when income data are present in all three years.
 
 #######################################################################################
 # Deterministic component
